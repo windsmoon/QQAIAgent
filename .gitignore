@@ -1,0 +1,83 @@
+# C# / .NET build output
+[Bb]in/
+[Oo]bj/
+/artifacts/
+/publish/
+/out/
+
+# Visual Studio / Rider / VS Code local state
+.vs/
+.idea/
+*.suo
+*.user
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.sln.iml
+*.DotSettings.user
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# NuGet caches and generated packages; keep NuGet.Config and lock files
+/packages/
+.nuget/packages/
+*.nupkg
+*.snupkg
+
+# Test / coverage / benchmark output
+TestResults/
+coverage/
+coverage-report/
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# Local credentials and configuration; keep sanitized templates
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!.env.*.example
+!.env.*.sample
+!.env.*.template
+*.local.json
+*.Local.json
+secrets.json
+*.secrets.json
+/secrets/
+
+# Agent runtime data: sessions, messages, databases, caches and logs
+/data/
+/runtime/
+/cache/
+/logs/
+/temp/
+*.log
+*.dmp
+
+# Third-party payloads are installed locally.
+# Keep the directory guide and each dependency's top-level placeholders/notices.
+/Third/**
+!/Third/*/
+!/Third/README.md
+!/Third/*/.gitkeep
+!/Third/*/README.md
+!/Third/*/LICENSE
+!/Third/*/LICENSE.*
+!/Third/*/NOTICE
+!/Third/*/NOTICE.*
+
+# OS and editor temporary files
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
