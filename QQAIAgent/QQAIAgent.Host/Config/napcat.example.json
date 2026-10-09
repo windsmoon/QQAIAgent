@@ -1,0 +1,5 @@
+{
+  "WebSocketUrl": "ws://YOUR_SERVER_IP:3001",
+  "AccessToken": "",
+  "BotAccount": 0
+}
