@@ -1,5 +1,6 @@
 using System.Text.Json;
 using QQAIAgent.Host;
+using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
 
@@ -12,6 +13,7 @@ var napCatConfig = JsonSerializer.Deserialize<NapCatConfig>(napCatConfigJson)
 
 builder.Services.AddSingleton(napCatConfig);
 builder.Services.AddSingleton<NapCatClient>();
+builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
