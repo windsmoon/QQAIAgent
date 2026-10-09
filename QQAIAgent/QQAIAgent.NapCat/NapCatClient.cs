@@ -75,6 +75,32 @@ public class NapCatClient(NapCatConfig config) : IDisposable
             }
         }
     }
+    
+    public async Task DisconnectAsync()
+    {
+        if (_socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+        {
+            // The stopping token may already be canceled; use a separate timeout for the closing handshake.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Stopping", timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _socket.Abort();
+            }
+            catch (WebSocketException)
+            {
+                _socket.Abort();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _socket.Dispose();
+    }
 
     private async Task<JsonDocument?> ReceiveMessageAsync(CancellationToken cancellationToken)
     {
@@ -100,32 +126,6 @@ public class NapCatClient(NapCatConfig config) : IDisposable
 
         message.Position = 0;
         return await JsonDocument.ParseAsync(message, cancellationToken: cancellationToken);
-    }
-
-    public async Task DisconnectAsync()
-    {
-        if (_socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
-        {
-            // The stopping token may already be canceled; use a separate timeout for the closing handshake.
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try
-            {
-                await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Stopping", timeout.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                _socket.Abort();
-            }
-            catch (WebSocketException)
-            {
-                _socket.Abort();
-            }
-        }
-    }
-
-    public void Dispose()
-    {
-        _socket.Dispose();
     }
     #endregion
 }
