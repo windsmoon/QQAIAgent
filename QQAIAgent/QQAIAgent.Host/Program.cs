@@ -1,5 +1,6 @@
 using System.Text.Json;
 using QQAIAgent.Host;
+using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -10,6 +11,7 @@ var napCatConfig = JsonSerializer.Deserialize<NapCatConfig>(napCatConfigJson)
     ?? throw new InvalidDataException($"NapCat 配置不能为 null：{napCatConfigPath}");
 
 builder.Services.AddSingleton(napCatConfig);
+builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
