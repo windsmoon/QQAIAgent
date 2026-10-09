@@ -39,7 +39,7 @@ public class NapCatClient(NapCatConfig config) : IDisposable
                 ?? throw new IOException("NapCat 在账号核验完成前关闭了连接。");
             var root = response.RootElement;
 
-            // 同一连接会交错收到 API 响应和事件，只处理本次登录信息请求的响应。
+            // API responses and events share this connection; only handle the response to this login info request.
             if (root.TryGetProperty("echo", out var responseEcho) == false
                 || responseEcho.ValueKind != JsonValueKind.String
                 || responseEcho.GetString() != echo)
@@ -67,7 +67,7 @@ public class NapCatClient(NapCatConfig config) : IDisposable
     {
         while (cancellationToken.IsCancellationRequested == false)
         {
-            // 本阶段只保持接收以发现连接关闭，后续在这里接入消息事件处理。
+            // For now, keep receiving to detect disconnection; message event handling will be added here later.
             using var message = await ReceiveMessageAsync(cancellationToken);
             if (message is null)
             {
@@ -93,7 +93,7 @@ public class NapCatClient(NapCatConfig config) : IDisposable
                 throw new InvalidDataException("NapCat 返回了非文本 WebSocket 消息。");
             }
 
-            // WebSocket 消息可能分成多帧，必须收齐后再解析 JSON。
+            // WebSocket messages may span multiple frames; receive the complete message before parsing JSON.
             message.Write(_receiveBuffer, 0, result.Count);
         }
         while (result.EndOfMessage == false);
@@ -106,7 +106,7 @@ public class NapCatClient(NapCatConfig config) : IDisposable
     {
         if (_socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
-            // 停止令牌此时可能已取消，关闭握手单独限时，避免退出一直等待远端。
+            // The stopping token may already be canceled; use a separate timeout for the closing handshake.
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {

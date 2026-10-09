@@ -36,7 +36,7 @@ public class Worker(NapCatClient napCatClient, ILogger<Worker> logger, IHostAppl
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Ctrl+C 会取消连接或接收操作，属于正常停止。
+            // Ctrl+C cancels connection or receive operations as part of normal shutdown.
         }
         finally
         {
