@@ -81,3 +81,9 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Local documentation
+/Doc/
+
+# Agent instructions at any directory depth
+AGENTS.md
