@@ -1,12 +1,28 @@
+using System.Threading.Channels;
+using QQAIAgent.Agent;
+using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
 
 namespace QQAIAgent.Host;
 
-public class Worker(NapCatClient napCatClient, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
+public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
 {
     #region fields
+    private readonly Channel<GroupMessage> _messages = Channel.CreateBounded<GroupMessage>(new BoundedChannelOptions(100)
+    {
+        SingleReader = true,
+        SingleWriter = true,
+        FullMode = BoundedChannelFullMode.Wait
+    });
+    #endregion
+
+    #region methods
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        Task? processingTask = null;
+        Task? disconnectTask = null;
+        napCatClient.GroupMessageReceived += EnqueueGroupMessage;
         try
         {
             using (var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
@@ -27,7 +43,10 @@ public class Worker(NapCatClient napCatClient, ILogger<Worker> logger, IHostAppl
                 }
             }
 
-            await napCatClient.WaitForDisconnectAsync(stoppingToken);
+            processingTask = ProcessMessagesAsync(processingCancellation.Token);
+            disconnectTask = napCatClient.WaitForDisconnectAsync(processingCancellation.Token);
+            var completedTask = await Task.WhenAny(processingTask, disconnectTask);
+            await completedTask;
             if (stoppingToken.IsCancellationRequested == false)
             {
                 logger.LogWarning("NapCat 已关闭连接，正在停止宿主。");
@@ -40,8 +59,64 @@ public class Worker(NapCatClient napCatClient, ILogger<Worker> logger, IHostAppl
         }
         finally
         {
-            await napCatClient.DisconnectAsync();
-            logger.LogInformation("NapCat 后台服务已停止。");
+            napCatClient.GroupMessageReceived -= EnqueueGroupMessage;
+            processingCancellation.Cancel();
+            _messages.Writer.TryComplete();
+            try
+            {
+                if (processingTask is not null && disconnectTask is not null)
+                {
+                    await Task.WhenAll(processingTask, disconnectTask);
+                }
+            }
+            catch (OperationCanceledException) when (processingCancellation.IsCancellationRequested)
+            {
+                // Canceling the message processor and disconnect waiter is part of normal shutdown.
+            }
+            finally
+            {
+                await napCatClient.DisconnectAsync();
+                logger.LogInformation("NapCat 后台服务已停止。");
+            }
+        }
+    }
+
+    private void EnqueueGroupMessage(GroupMessage message)
+    {
+        logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，文本={Text}", message.GroupId, message.SenderId, message.Text);
+
+        // Never wait in the receive callback: the same loop must keep reading API responses.
+        if (_messages.Writer.TryWrite(message) == false)
+        {
+            logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+        }
+    }
+
+    private async Task ProcessMessagesAsync(CancellationToken cancellationToken)
+    {
+        await foreach (var message in _messages.Reader.ReadAllAsync(cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                logger.LogInformation("正在处理群消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+                var messageId = await messageAgent.HandleMessageAsync(message, cancellationToken);
+                if (messageId is null)
+                {
+                    logger.LogInformation("群消息无需回复：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+                    continue;
+                }
+
+                logger.LogInformation("测试指令已处理，pong 发送成功：群={GroupId}，消息ID={MessageId}", message.GroupId, messageId.Value);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "群消息处理或发送未完成：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+            }
         }
     }
     #endregion
