@@ -10,4 +10,10 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.7"/>
     </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\QQAIAgent.Agent\QQAIAgent.Agent.csproj" />
+      <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" />
+      <ProjectReference Include="..\QQAIAgent.NapCat\QQAIAgent.NapCat.csproj" />
+    </ItemGroup>
 </Project>
