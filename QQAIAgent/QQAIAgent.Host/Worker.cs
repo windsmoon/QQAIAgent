@@ -1,11 +1,13 @@
 using System.Threading.Channels;
 using QQAIAgent.Agent;
+using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
+using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.Host;
 
-public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
+public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, AgentConfig agentConfig, NapCatConfig napCatConfig, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
 {
     #region fields
     private readonly Channel<GroupMessage> _messages = Channel.CreateBounded<GroupMessage>(new BoundedChannelOptions(100)
@@ -22,7 +24,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, I
         using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         Task? processingTask = null;
         Task? disconnectTask = null;
-        napCatClient.GroupMessageReceived += EnqueueGroupMessage;
+        napCatClient.GroupMessageReceived += OnGroupMessageReceived;
         try
         {
             using (var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
@@ -59,7 +61,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, I
         }
         finally
         {
-            napCatClient.GroupMessageReceived -= EnqueueGroupMessage;
+            napCatClient.GroupMessageReceived -= OnGroupMessageReceived;
             processingCancellation.Cancel();
             _messages.Writer.TryComplete();
             try
@@ -81,14 +83,30 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, I
         }
     }
 
-    private void EnqueueGroupMessage(GroupMessage message)
+    private void OnGroupMessageReceived(GroupMessage message)
     {
+        if (message.SenderId == napCatConfig.BotAccount)
+        {
+            return;
+        }
+
+        if (agentConfig.AllowedGroups.Contains(message.GroupId) == false)
+        {
+            return;
+        }
+
+        string text = message.Text.TrimStart();
+        if (text.StartsWith("123") == false)
+        {
+            return;
+        }
         logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，文本={Text}", message.GroupId, message.SenderId, message.Text);
 
         // Never wait in the receive callback: the same loop must keep reading API responses.
         if (_messages.Writer.TryWrite(message) == false)
         {
             logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+            napCatClient.SendGroupMessageAsync(message.GroupId, "群消息队列已满，请稍后再试", new CancellationToken());
         }
     }
 
