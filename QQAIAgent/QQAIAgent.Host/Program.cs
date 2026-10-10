@@ -2,6 +2,7 @@ using System.Text.Json;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Config;
+using QQAIAgent.Agent;
 using QQAIAgent.DeepSeek;
 using QQAIAgent.Host;
 using QQAIAgent.Host.Plugin;
@@ -35,6 +36,7 @@ builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
 ToolPluginLoader.RegisterTools(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
+builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(),
     services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>()));
