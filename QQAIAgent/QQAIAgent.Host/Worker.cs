@@ -57,7 +57,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Ctrl+C cancels connection or receive operations as part of normal shutdown.
+            // 按下 Ctrl+C 时取消连接或接收操作，属于正常退出流程。
         }
         finally
         {
@@ -73,7 +73,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             }
             catch (OperationCanceledException) when (processingCancellation.IsCancellationRequested)
             {
-                // Canceling the message processor and disconnect waiter is part of normal shutdown.
+                // 正常退出时取消消息处理任务和等待连接断开的任务。
             }
             finally
             {
@@ -102,7 +102,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         }
         logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，文本={Text}", message.GroupId, message.SenderId, message.Text);
 
-        // Never wait in the receive callback: the same loop must keep reading API responses.
+        // 接收回调中不能等待消息处理完成，同一个接收循环还需要继续读取 API 响应。
         if (_messages.Writer.TryWrite(message) == false)
         {
             logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
@@ -125,7 +125,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
                     continue;
                 }
 
-                logger.LogInformation("测试指令已处理，pong 发送成功：群={GroupId}，消息ID={MessageId}", message.GroupId, messageId.Value);
+                logger.LogInformation("群消息回复发送成功：群={GroupId}，消息ID={MessageId}", message.GroupId, messageId.Value);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

@@ -7,7 +7,7 @@ using QQAIAgent.Agent.Chat;
 
 namespace DeepSeek;
 
-public sealed class DeepSeekChatModel : IChatModel
+public sealed class DeepSeekChatModel : IChatModel, IDisposable
 {
     #region fields
     private readonly HttpClient _httpClient;
@@ -22,10 +22,8 @@ public sealed class DeepSeekChatModel : IChatModel
     #endregion
 
     #region methods
-    public DeepSeekChatModel(HttpClient httpClient)
+    public DeepSeekChatModel()
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
-
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
@@ -43,11 +41,11 @@ public sealed class DeepSeekChatModel : IChatModel
             throw new ArgumentException("DeepSeek Endpoint 必须是 HTTPS 绝对地址。", nameof(config));
         }
 
-        _httpClient = httpClient;
         _apiKey = config.ApiKey;
         _model = config.Model;
         _endpoint = endpoint;
         _timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
+        _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     public async Task<ChatResponse> CompleteAsync(ChatRequest request, CancellationToken cancellationToken)
@@ -112,6 +110,11 @@ public sealed class DeepSeekChatModel : IChatModel
         await using var responseStream = await httpResponse.Content.ReadAsStreamAsync(timeout.Token);
         using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
         return ParseResponse(document.RootElement);
+    }
+
+    public void Dispose()
+    {
+        _httpClient.Dispose();
     }
 
     private static ChatResponse ParseResponse(JsonElement root)
