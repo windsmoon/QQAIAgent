@@ -45,7 +45,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义及启用状态 | Host |
 
-`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串，工具执行和模型工具调用尚未接入。
+`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串，工具执行尚未接入。
 
 构建和发布 Host 时，配置文件会复制到宿主程序目录的 `Config/`。运行时以 `AppContext.BaseDirectory` 定位文件，不依赖启动时的工作目录。DeepSeek 在模型实例创建时读取自己的配置，配置对象不注册到 Host 的依赖注入容器中。
 
@@ -72,6 +72,8 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 ## 模型调用与部署
 
 当前固定使用 `DeepSeekChatModel`。模型单例由依赖注入容器创建和管理，宿主退出时释放模型及其内部的 `HttpClient`。每次调用通过 `ChatRequest.Messages` 单独传入当前问题。
+
+`ChatRequest.Tools` 可以赋值。Agent 通过构造函数获取启用的工具定义，模型的 `SupportsToolCalling` 为 `true` 时才将其传入请求。DeepSeek 请求已支持工具定义、assistant 消息中的 `tool_calls` 和工具结果消息中的 `tool_call_id`，参数 Schema 会作为 JSON 对象发送；没有工具定义时省略 `tools` 字段。工具调用响应解析和 Agent 循环尚未实现，DeepSeek 的 `SupportsToolCalling` 仍为 `false`，当前 QQ 消息处理的工具列表保持为空。
 
 发布时部署 Host 的完整发布输出，包括引用的程序集、其他运行依赖和实际使用的配置。主要文件如下：
 

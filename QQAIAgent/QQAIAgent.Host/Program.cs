@@ -35,7 +35,7 @@ builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredSe
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(),
-    services.GetRequiredService<IChatModel>()));
+    services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>()));
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

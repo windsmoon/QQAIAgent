@@ -4,7 +4,7 @@ using QQAIAgent.Messaging;
 
 namespace QQAIAgent.Agent;
 
-public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IChatModel chatModel)
+public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions)
 {
     #region fields
     #endregion
@@ -25,7 +25,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         {
             response = await chatModel.CompleteAsync(new ChatRequest
             {
-                Messages = [new ChatMessage { Role = ChatRole.User, Content = text }]
+                Messages = [new ChatMessage { Role = ChatRole.User, Content = text }],
+                Tools = chatModel.SupportsToolCalling ? toolDefinitions : []
             }, cancellationToken);
         }
         catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)

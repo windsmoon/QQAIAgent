@@ -18,6 +18,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #endregion
 
     #region properties
+    // 工具调用响应解析尚未接入，暂不声明完整的工具调用能力。
     public bool SupportsToolCalling => false;
     #endregion
 
@@ -56,12 +57,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             throw new ArgumentException("模型请求必须包含至少一条消息。", nameof(request));
         }
 
-        if (request.Tools.Count > 0)
-        {
-            throw new NotSupportedException("当前 DeepSeek 实现不支持工具调用。");
-        }
-
-        if (request.MaxOutputTokens is <= 0)
+        if (request.MaxOutputTokens <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(request), "MaxOutputTokens 必须大于零。");
         }
@@ -69,9 +65,9 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         var messages = new List<object>(request.Messages.Count);
         foreach (var message in request.Messages)
         {
-            if (message is null || message.ToolCalls.Count > 0 || string.IsNullOrEmpty(message.ToolCallId) == false)
+            if (message is null)
             {
-                throw new NotSupportedException("当前 DeepSeek 实现只接受纯文本对话功能。");
+                throw new ArgumentException("请求消息不能为 null。", nameof(request));
             }
 
             var role = message.Role switch
@@ -79,29 +75,76 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 ChatRole.System => "system",
                 ChatRole.User => "user",
                 ChatRole.Assistant => "assistant",
+                ChatRole.Tool => "tool",
                 _ => throw new NotSupportedException($"当前 DeepSeek 实现不支持 {message.Role} 角色。")
             };
 
-            if (string.IsNullOrEmpty(message.Content))
+            var serializedMessage = new Dictionary<string, object>
+            {
+                ["role"] = role,
+                ["content"] = message.Content
+            };
+            if (message is { Role: ChatRole.Assistant, ToolCalls.Count: > 0 })
+            {
+                // 带工具调用的 assistant 消息可以没有文本，但必须保留调用 ID 和参数。
+                serializedMessage["tool_calls"] = message.ToolCalls.Select(toolCall => new
+                {
+                    id = toolCall.Id,
+                    type = "function",
+                    function = new
+                    {
+                        name = toolCall.Name,
+                        arguments = toolCall.ArgumentsJson
+                    }
+                }).ToList();
+            }
+            else if (message.Role == ChatRole.Tool)
+            {
+                serializedMessage["tool_call_id"] = message.ToolCallId;
+            }
+            else if (string.IsNullOrEmpty(message.Content))
             {
                 throw new ArgumentException("纯文本消息内容不能为空。", nameof(request));
             }
 
-            messages.Add(new { role, content = message.Content });
+            messages.Add(serializedMessage);
+        }
+
+        var requestBody = new Dictionary<string, object>
+        {
+            ["model"] = _model,
+            ["messages"] = messages,
+            ["max_tokens"] = request.MaxOutputTokens,
+            ["stream"] = false,
+            ["thinking"] = new { type = "disabled" }
+        };
+        if (request.Tools.Count > 0)
+        {
+            var tools = new List<object>(request.Tools.Count);
+            foreach (var tool in request.Tools)
+            {
+                var function = new Dictionary<string, object?>
+                {
+                    ["name"] = tool.Name,
+                    ["description"] = tool.Description
+                };
+                if (string.IsNullOrWhiteSpace(tool.ParametersJson) == false)
+                {
+                    // parameters 需要发送 JSON 对象，不能直接发送配置中的 JSON 字符串。
+                    function["parameters"] = JsonSerializer.Deserialize<JsonElement>(tool.ParametersJson);
+                }
+
+                tools.Add(new { type = "function", function });
+            }
+
+            requestBody["tools"] = tools;
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
-            Content = JsonContent.Create(new
-            {
-                model = _model,
-                messages,
-                max_tokens = request.MaxOutputTokens,
-                stream = false,
-                thinking = new { type = "disabled" }
-            })
+            Content = JsonContent.Create(requestBody)
         };
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
