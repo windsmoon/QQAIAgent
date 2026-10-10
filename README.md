@@ -43,9 +43,9 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号 | Host |
 | `agent.example.json` | `agent.local.json` | 群白名单 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
-| `tools.example.json` | `tools.local.json` | 工具定义及启用状态 | 待接入 |
+| `tools.example.json` | `tools.local.json` | 工具定义及启用状态 | Host |
 
-`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。`Enabled` 表示是否启用，省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串，工具配置尚未接入模型调用。
+`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串，工具执行和模型工具调用尚未接入。
 
 构建和发布 Host 时，配置文件会复制到宿主程序目录的 `Config/`。运行时以 `AppContext.BaseDirectory` 定位文件，不依赖启动时的工作目录。DeepSeek 在模型实例创建时读取自己的配置，配置对象不注册到 Host 的依赖注入容器中。
 
@@ -62,7 +62,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 ## 本地运行
 
 1. 准备 .NET 10 SDK，并在 NapCat 中配置正向 WebSocket 服务。
-2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写三份本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
+2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写四份本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
 3. 在 `agent.local.json` 中填写群白名单，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。
 4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek，并将模型程序集复制到宿主输出目录。
 5. 在白名单群中发送 `123 你好`，由模型生成文本后回复到该群。
@@ -84,7 +84,8 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 └── Config/
     ├── napcat.local.json
     ├── agent.local.json
-    └── deepseek.local.json
+    ├── deepseek.local.json
+    └── tools.local.json
 ```
 
 以上仅列出主要文件，宿主的其他运行依赖仍需随发布输出一起部署。
