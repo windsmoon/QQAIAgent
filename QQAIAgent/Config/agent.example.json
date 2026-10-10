@@ -1,5 +1,3 @@
 {
-  "AllowedGroups": [],
-  "ChatModelAssembly": "Extensions/DeepSeek/DeepSeek.dll",
-  "ChatModelType": "DeepSeek.DeepSeekChatModel"
+  "AllowedGroups": []
 }

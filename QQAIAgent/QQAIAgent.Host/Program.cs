@@ -1,6 +1,7 @@
 using System.Text.Json;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Config;
+using QQAIAgent.DeepSeek;
 using QQAIAgent.Host;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
@@ -23,8 +24,7 @@ builder.Services.AddSingleton(napCatConfig);
 builder.Services.AddSingleton(agentConfig);
 builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
-builder.Services.AddSingleton<IChatModel>(_ => ChatModelLoader.Load(
-    agentConfig.ChatModelAssembly, agentConfig.ChatModelType));
+builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(),
     services.GetRequiredService<IChatModel>()));

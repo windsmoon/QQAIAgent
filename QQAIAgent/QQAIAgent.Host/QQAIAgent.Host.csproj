@@ -15,6 +15,7 @@
       <ProjectReference Include="..\QQAIAgent.Agent\QQAIAgent.Agent.csproj" />
       <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" />
       <ProjectReference Include="..\QQAIAgent.NapCat\QQAIAgent.NapCat.csproj" />
+      <ProjectReference Include="..\DeepSeek\DeepSeek.csproj" />
     </ItemGroup>
 
     <ItemGroup>
