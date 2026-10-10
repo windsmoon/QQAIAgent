@@ -12,13 +12,38 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj" />
       <ProjectReference Include="..\QQAIAgent.Agent\QQAIAgent.Agent.csproj" />
       <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" />
       <ProjectReference Include="..\QQAIAgent.NapCat\QQAIAgent.NapCat.csproj" />
       <ProjectReference Include="..\DeepSeek\DeepSeek.csproj" />
+      <ProjectReference Include="..\QQAIAgent.Tools\QQAIAgent.Tools.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="ToolPluginAssembly" />
     </ItemGroup>
 
     <ItemGroup>
       <Content Include="..\Config\*.json" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
+
+    <!-- 项目引用只负责构建插件，运行时从 Plugins 目录加载。 -->
+    <Target Name="CollectToolPluginFiles" AfterTargets="ResolveProjectReferences" Condition="'@(ToolPluginAssembly)' != ''">
+        <ItemGroup>
+            <ToolPluginFile Include="%(ToolPluginAssembly.RootDir)%(ToolPluginAssembly.Directory)**\*">
+                <PluginName>%(ToolPluginAssembly.Filename)</PluginName>
+            </ToolPluginFile>
+        </ItemGroup>
+    </Target>
+
+    <Target Name="CopyToolPlugins" AfterTargets="Build">
+        <Copy SourceFiles="@(ToolPluginFile)"
+              DestinationFiles="@(ToolPluginFile->'$(TargetDir)Plugins\%(PluginName)\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true">
+            <Output TaskParameter="CopiedFiles" ItemName="FileWrites" />
+        </Copy>
+    </Target>
+
+    <Target Name="PublishToolPlugins" AfterTargets="Publish" DependsOnTargets="ResolveProjectReferences;CollectToolPluginFiles">
+        <Copy SourceFiles="@(ToolPluginFile)"
+              DestinationFiles="@(ToolPluginFile->'$(PublishDir)Plugins\%(PluginName)\%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+    </Target>
 </Project>

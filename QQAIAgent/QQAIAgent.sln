@@ -22,6 +22,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{A97959
 		Config\tools.local.json = Config\tools.local.json
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Abstractions", "QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj", "{A27BF88D-950D-4F34-8B90-165D6A8B1E70}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Tools", "QQAIAgent.Tools\QQAIAgent.Tools.csproj", "{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -48,5 +52,13 @@ Global
 		{B2B861C0-7357-42FA-AB83-C07902461BA3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2B861C0-7357-42FA-AB83-C07902461BA3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B2B861C0-7357-42FA-AB83-C07902461BA3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A27BF88D-950D-4F34-8B90-165D6A8B1E70}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A27BF88D-950D-4F34-8B90-165D6A8B1E70}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A27BF88D-950D-4F34-8B90-165D6A8B1E70}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A27BF88D-950D-4F34-8B90-165D6A8B1E70}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
