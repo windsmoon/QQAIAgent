@@ -1,0 +1,20 @@
+[
+  {
+    "Name": "get_time",
+    "Description": "获取当前日期和时间。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{}}",
+    "Enabled": true
+  },
+  {
+    "Name": "web_search",
+    "Description": "通过互联网搜索相关信息。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"搜索关键词或问题\"}},\"required\":[\"query\"]}",
+    "Enabled": false
+  },
+  {
+    "Name": "fetch_web_page",
+    "Description": "获取指定网页的正文内容。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"需要获取内容的网页地址\"}},\"required\":[\"url\"]}",
+    "Enabled": false
+  }
+]

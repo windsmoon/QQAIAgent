@@ -43,6 +43,9 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号 | Host |
 | `agent.example.json` | `agent.local.json` | 群白名单 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
+| `tools.example.json` | `tools.local.json` | 工具定义及启用状态 | 待接入 |
+
+`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。`Enabled` 表示是否启用，省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串，工具配置尚未接入模型调用。
 
 构建和发布 Host 时，配置文件会复制到宿主程序目录的 `Config/`。运行时以 `AppContext.BaseDirectory` 定位文件，不依赖启动时的工作目录。DeepSeek 在模型实例创建时读取自己的配置，配置对象不注册到 Host 的依赖注入容器中。
 
