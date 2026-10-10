@@ -1,4 +1,4 @@
-namespace DeepSeek.Config;
+namespace QQAIAgent.DeepSeek.Config;
 
 public sealed class DeepSeekConfig
 {

@@ -1,11 +1,11 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using DeepSeek.Config;
+using QQAIAgent.DeepSeek.Config;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 
-namespace DeepSeek;
+namespace QQAIAgent.DeepSeek;
 
 public sealed class DeepSeekChatModel : IChatModel, IDisposable
 {
