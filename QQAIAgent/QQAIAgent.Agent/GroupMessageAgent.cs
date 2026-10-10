@@ -20,10 +20,23 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             return await messageSender.SendGroupMessageAsync(message.GroupId, "输入内容为空", cancellationToken);
         }
 
-        var response = await chatModel.CompleteAsync(new ChatRequest
+        ChatResponse response;
+        try
         {
-            Messages = [new ChatMessage { Role = ChatRole.User, Content = text }]
-        }, cancellationToken);
+            response = await chatModel.CompleteAsync(new ChatRequest
+            {
+                Messages = [new ChatMessage { Role = ChatRole.User, Content = text }]
+            }, cancellationToken);
+        }
+        catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
+        {
+            var failureText = exception is OperationCanceledException
+                ? "模型请求超时，请稍后再试"
+                : "模型请求失败，请稍后再试";
+            await messageSender.SendGroupMessageAsync(message.GroupId, failureText, cancellationToken);
+            // 提示发送后继续抛出原异常，由宿主记录日志并处理下一条消息。
+            throw;
+        }
 
         if (string.IsNullOrWhiteSpace(response.Message.Content))
         {
