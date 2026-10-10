@@ -1,0 +1,6 @@
+{
+  "ApiKey": "",
+  "Model": "deepseek-flash",
+  "Endpoint": "https://api.deepseek.com/chat/completions",
+  "TimeoutSeconds": 60
+}

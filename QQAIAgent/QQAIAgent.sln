@@ -10,6 +10,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Agent", "QQAIAgen
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeepSeek", "DeepSeek\DeepSeek.csproj", "{B2B861C0-7357-42FA-AB83-C07902461BA3}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{A97959F6-F5C4-4C8A-8E2E-D4A5B0FBAB62}"
+	ProjectSection(SolutionItems) = preProject
+		Config\agent.example.json = Config\agent.example.json
+		Config\agent.local.json = Config\agent.local.json
+		Config\deepseek.example.json = Config\deepseek.example.json
+		Config\deepseek.local.json = Config\deepseek.local.json
+		Config\napcat.example.json = Config\napcat.example.json
+		Config\napcat.local.json = Config\napcat.local.json
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

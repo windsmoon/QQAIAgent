@@ -1,6 +1,6 @@
-namespace DeepSeek;
+namespace DeepSeek.Config;
 
-public sealed class DeepSeekOptions
+public sealed class DeepSeekConfig
 {
     #region properties
     public string ApiKey { get; set; } = string.Empty;

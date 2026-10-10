@@ -8,12 +8,13 @@ using QQAIAgent.NapCat.Config;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-var napCatConfigPath = Path.Combine(AppContext.BaseDirectory, "Config", "napcat.local.json");
+var configDirectory = Path.Combine(AppContext.BaseDirectory, "Config");
+var napCatConfigPath = Path.Combine(configDirectory, "napcat.local.json");
 var napCatConfigJson = File.ReadAllText(napCatConfigPath);
 var napCatConfig = JsonSerializer.Deserialize<NapCatConfig>(napCatConfigJson)
     ?? throw new InvalidDataException($"NapCat 配置不能为 null：{napCatConfigPath}");
 
-var agentConfigPath = Path.Combine(AppContext.BaseDirectory, "Config", "agent.local.json");
+var agentConfigPath = Path.Combine(configDirectory, "agent.local.json");
 var agentConfigJson = File.ReadAllText(agentConfigPath);
 var agentConfig = JsonSerializer.Deserialize<AgentConfig>(agentConfigJson)
     ?? throw new InvalidDataException($"Agent 配置不能为 null：{agentConfigPath}");

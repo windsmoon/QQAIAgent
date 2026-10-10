@@ -10,4 +10,8 @@
       <ProjectReference Include="..\QQAIAgent.Agent\QQAIAgent.Agent.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Content Include="..\Config\deepseek.*.json" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
 </Project>

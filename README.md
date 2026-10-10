@@ -23,6 +23,18 @@ QQAIAgent/
 
 当前仅完成仓库基础文件与第三方目录，尚未创建 C# 解决方案，也未安装 NapCat。后续 C# 工程与 `Third` 分开存放，由 Agent 的协议适配层对接 NapCat。
 
+## 业务配置
+
+业务 JSON 配置统一放在 `QQAIAgent/Config/`，与 `QQAIAgent.sln` 所在目录下的各项目文件夹同级。
+
+- `napcat.example.json`：NapCat 连接与账号配置模板。
+- `agent.example.json`：Agent 群白名单配置模板。
+- `deepseek.example.json`：DeepSeek API Key、模型、完整请求地址及超时配置模板。
+
+将模板复制为同名的 `*.local.json` 并填写实际配置，例如 `deepseek.local.json`。本地配置已由 Git 忽略。Host 启动时读取 NapCat 和 Agent 配置；DeepSeek 在自身模型实例创建时读取 `deepseek.local.json`。构建和发布时会把配置文件复制到程序目录的 `Config/`，运行时按程序目录定位配置，不依赖启动时的工作目录。
+
+大模型通过 `IChatModel` 接口开放给外部扩展。具体提供商在自己的项目中加载和使用配置，Host 不引用或注册具体的大模型实现。
+
 ## 使用协议
 
 本项目采用自定义限制性许可，完整条款见 [LICENSE](LICENSE)：

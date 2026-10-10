@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DeepSeek.Config;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 
@@ -21,27 +22,32 @@ public sealed class DeepSeekChatModel : IChatModel
     #endregion
 
     #region methods
-    public DeepSeekChatModel(HttpClient httpClient, DeepSeekOptions options)
+    public DeepSeekChatModel(HttpClient httpClient)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.Model);
-        if (options.TimeoutSeconds <= 0)
+
+        var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
+        var configJson = File.ReadAllText(configPath);
+        var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
+            ?? throw new InvalidDataException($"DeepSeek 配置不能为 null：{configPath}");
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(config.ApiKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(config.Model);
+        if (config.TimeoutSeconds <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(options), "TimeoutSeconds 必须大于零。");
+            throw new ArgumentOutOfRangeException(nameof(config), "TimeoutSeconds 必须大于零。");
         }
 
-        if (Uri.TryCreate(options.Endpoint, UriKind.Absolute, out var endpoint) == false || endpoint.Scheme != Uri.UriSchemeHttps)
+        if (Uri.TryCreate(config.Endpoint, UriKind.Absolute, out var endpoint) == false || endpoint.Scheme != Uri.UriSchemeHttps)
         {
-            throw new ArgumentException("DeepSeek Endpoint 必须是 HTTPS 绝对地址。", nameof(options));
+            throw new ArgumentException("DeepSeek Endpoint 必须是 HTTPS 绝对地址。", nameof(config));
         }
 
         _httpClient = httpClient;
-        _apiKey = options.ApiKey;
-        _model = options.Model;
+        _apiKey = config.ApiKey;
+        _model = config.Model;
         _endpoint = endpoint;
-        _timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        _timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
     }
 
     public async Task<ChatResponse> CompleteAsync(ChatRequest request, CancellationToken cancellationToken)
