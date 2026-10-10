@@ -21,6 +21,7 @@ public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToo
             }
             else
             {
+                // TODO 用 Dictionary
                 var tool = tools.FirstOrDefault(candidate => candidate.Name == toolCall.Name);
                 if (tool is null)
                 {
