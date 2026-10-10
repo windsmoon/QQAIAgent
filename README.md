@@ -13,7 +13,7 @@
 - 所有群共用一个容量为 100 的消息队列，按顺序完成模型请求和 QQ 回复。
 - 模型实例作为单例复用，每条消息单独创建 `ChatRequest`，当前不保存历史上下文。
 - DeepSeek 在自己的项目中读取配置，并维护一个复用的 `HttpClient`。
-- 当前仅实现单次文本问答，不使用工具调用或 Agent 循环（agent loop）。
+- DeepSeek 已支持工具调用请求和响应解析；群消息仍只调用一次模型，工具执行与 Agent 循环（agent loop）尚未接入。
 
 ## 目录结构
 
@@ -89,13 +89,15 @@ Host 启动时扫描 `AppContext.BaseDirectory/Plugins/` 的直接子目录。�
 3. 将插件完整构建输出放到宿主的 `Plugins/程序集名称/`，在 `tools.local.json` 中按每个工具的名称填写定义和开关，然后重新启动 Host。
 4. 如果插件源码也在当前解决方案中，并希望运行 Host 时自动构建它，在 Host 中添加与内置插件相同的项目引用元数据：`ReferenceOutputAssembly="false"`、`Private="false"` 和 `OutputItemType="ToolPluginAssembly"`。现有复制任务会自动处理该插件输出。
 
-`Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现和注册已经接入，模型工具调用响应解析及 Agent 调用循环尚未接入，当前 QQ 问答仍使用单次文本请求。
+`Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现、注册和模型工具调用响应解析已经接入；Agent 工具执行和调用循环尚未接入，当前群消息仍只请求一次模型。
 
 ## 模型调用与部署
 
 当前固定使用 `DeepSeekChatModel`。模型单例由依赖注入容器创建和管理，宿主退出时释放模型及其内部的 `HttpClient`。每次调用通过 `ChatRequest.Messages` 单独传入当前问题。
 
-`ChatRequest.Tools` 可以赋值。Agent 通过构造函数获取启用的工具定义，模型的 `SupportsToolCalling` 为 `true` 时才将其传入请求。DeepSeek 请求已支持工具定义、assistant 消息中的 `tool_calls` 和工具结果消息中的 `tool_call_id`，参数 Schema 会作为 JSON 对象发送；没有工具定义时省略 `tools` 字段。工具调用响应解析和 Agent 循环尚未实现，DeepSeek 的 `SupportsToolCalling` 仍为 `false`，当前 QQ 消息处理的工具列表保持为空。
+`ChatRequest.Tools` 可以赋值。Agent 通过构造函数获取启用的工具定义，模型的 `SupportsToolCalling` 为 `true` 时才将其传入请求。DeepSeek 请求已支持工具定义、assistant 消息中的 `tool_calls` 和工具结果消息中的 `tool_call_id`，参数 Schema 会作为 JSON 对象发送；没有工具定义时省略 `tools` 字段。DeepSeek 的 `SupportsToolCalling` 已为 `true`，响应中的所有 `tool_calls` 会按顺序解析到 `ChatResponse.Message.ToolCalls`，保留调用 ID、工具名称和参数 JSON 字符串，工具调用消息的 `content` 可以为 `null`。参数字符串在响应解析时不会再次解析或改写，由工具执行阶段处理。
+
+当前 QQ 请求会携带启用的工具定义，但 Agent 尚未执行工具或继续请求模型。如果模型仅返回工具调用而没有文本，群消息处理会回复“回复内容为空”；完整工具问答需要继续接入 Agent 工具执行和调用循环。
 
 发布时部署 Host 的完整发布输出，包括引用的程序集、其他运行依赖和实际使用的配置。主要文件如下：
 

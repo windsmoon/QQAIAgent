@@ -18,8 +18,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #endregion
 
     #region properties
-    // 工具调用响应解析尚未接入，暂不声明完整的工具调用能力。
-    public bool SupportsToolCalling => false;
+    public bool SupportsToolCalling => true;
     #endregion
 
     #region methods
@@ -182,11 +181,6 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             "aborted" or "insufficient_system_resource" => ChatFinishReason.Interrupted,
             _ => ChatFinishReason.Unknown
         };
-        if (finishReason == ChatFinishReason.ToolCalls)
-        {
-            throw new NotSupportedException("DeepSeek 返回了当前实现不支持的工具调用。");
-        }
-
         if (choice.TryGetProperty("message", out var responseMessage) == false
             || responseMessage.ValueKind != JsonValueKind.Object
             || responseMessage.TryGetProperty("role", out var role) == false
@@ -199,6 +193,47 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         }
 
         var text = content.GetString() ?? "";
+        var toolCalls = new List<ChatToolCall>();
+        if (responseMessage.TryGetProperty("tool_calls", out var toolCallValues) && toolCallValues.ValueKind != JsonValueKind.Null)
+        {
+            if (toolCallValues.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidDataException("DeepSeek 响应中的 tool_calls 必须是数组。");
+            }
+
+            foreach (var toolCall in toolCallValues.EnumerateArray())
+            {
+                if (toolCall.ValueKind != JsonValueKind.Object
+                    || toolCall.TryGetProperty("id", out var id) == false
+                    || id.ValueKind != JsonValueKind.String
+                    || toolCall.TryGetProperty("type", out var type) == false
+                    || type.ValueKind != JsonValueKind.String
+                    || type.GetString() != "function"
+                    || toolCall.TryGetProperty("function", out var function) == false
+                    || function.ValueKind != JsonValueKind.Object
+                    || function.TryGetProperty("name", out var name) == false
+                    || name.ValueKind != JsonValueKind.String
+                    || function.TryGetProperty("arguments", out var arguments) == false
+                    || arguments.ValueKind != JsonValueKind.String)
+                {
+                    throw new InvalidDataException("DeepSeek 响应缺少有效的 function 工具调用。");
+                }
+
+                // 参数保留模型返回的字符串，由工具执行阶段负责解析。
+                toolCalls.Add(new ChatToolCall
+                {
+                    Id = id.GetString() ?? string.Empty,
+                    Name = name.GetString() ?? string.Empty,
+                    ArgumentsJson = arguments.GetString() ?? string.Empty
+                });
+            }
+        }
+
+        if (finishReason == ChatFinishReason.ToolCalls && toolCalls.Count == 0)
+        {
+            throw new InvalidDataException("DeepSeek 工具调用响应没有可用的 tool_calls。");
+        }
+
         if ((finishReason is ChatFinishReason.Finish or ChatFinishReason.Length) && string.IsNullOrWhiteSpace(text))
         {
             throw new InvalidDataException("DeepSeek 响应没有可用的文本内容。");
@@ -206,7 +241,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
 
         return new ChatResponse
         {
-            Message = new ChatMessage { Role = ChatRole.Assistant, Content = text },
+            Message = new ChatMessage { Role = ChatRole.Assistant, Content = text, ToolCalls = toolCalls },
             FinishReason = finishReason
         };
     }
