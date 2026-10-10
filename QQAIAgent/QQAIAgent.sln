@@ -18,6 +18,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{A97959
 		Config\deepseek.local.json = Config\deepseek.local.json
 		Config\napcat.example.json = Config\napcat.example.json
 		Config\napcat.local.json = Config\napcat.local.json
+		Config\tools.example.json = Config\tools.example.json
+		Config\tools.local.json = Config\tools.local.json
 	EndProjectSection
 EndProject
 Global
