@@ -49,8 +49,11 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | `agent.example.json` | `agent.local.json` | 群白名单、每条请求的模型调用次数上限 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
+| `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 预留，尚未接入 |
 
-`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具定义列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串。工具定义的 `Name` 与插件实现的 `ITool.Name` 对应；开关控制开放给模型的工具定义，不影响插件加载，也不限制 QQ 指令直接使用基础功能。
+`websearch.local.json` 中的 `ApiKey` 和 `Endpoint` 默认均为空，分别填写搜索服务的 API Key 和完整请求地址。当前仅提供配置文件及对应的 `WebSearchConfig` 类型，联网搜索工具尚未实现，暂不读取此配置。
+
+`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具定义列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前模板中获取时间（`get_time`）和获取网页（`fetch_web_page`）开启，联网搜索（`web_search`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串。工具定义的 `Name` 与插件实现的 `ITool.Name` 对应；开关控制开放给模型的工具定义，不影响插件加载，也不限制 QQ 指令直接使用基础功能。
 
 每个工具对象的 `TimeoutSeconds` 控制该工具单次调用的超时秒数，填写正数，省略时默认为 30。当前配置中 `get_time` 为 5 秒、`web_search` 为 30 秒、`fetch_web_page` 为 60 秒。每次调用按对应工具的配置独立计时；超时后返回带原调用 ID 的工具失败消息，继续执行本轮剩余工具，再将结果交给模型处理。整个请求被取消时，仍然向上传递取消异常。该配置由工具执行器使用，不会发送给模型。
 
@@ -79,7 +82,11 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 
 ## 工具插件
 
-`QQAIAgent.Abstractions` 定义 `ITool` 接口。插件通过 `Name` 标识工具，`ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)` 接收参数 JSON，返回文本或 JSON 字符串。`QQAIAgent.Tools` 是内置插件项目，当前包含 `GetTimeTool`，其名称为 `get_time`，返回服务器当前时间的 ISO 8601 字符串，包含时区偏移。
+`QQAIAgent.Abstractions` 定义 `ITool` 接口。插件通过 `Name` 标识工具，`ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)` 接收参数 JSON，返回文本或 JSON 字符串。`QQAIAgent.Tools` 是内置插件项目，当前包含 `GetTimeTool` 和 `FetchWebPageTool`。`get_time` 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移。
+
+`fetch_web_page` 接收 `{"url":"https://example.com"}`，支持 HTTP/HTTPS、自动重定向、压缩响应以及 HTML 和纯文本内容。结果为包含 `url`（重定向后的最终地址）、`title` 和 `content` 的 JSON。HTML 使用 HtmlAgilityPack 解析，优先提取 `main`，没有时提取 `body`，过滤脚本、样式、注释和显式隐藏的内容，并保留段落换行。响应头未声明编码时读取 HTML 的 meta 编码，支持 UTF-8、GBK、GB2312 等编码及 BOM。工具复用一个 `HttpClient`，由宿主退出时释放，网络请求使用工具执行器传入的取消令牌和超时配置。
+
+该工具获取服务器返回的静态正文，不执行 JavaScript；需要登录或浏览器渲染的内容可能无法获取。HTTP 失败和不支持的内容类型交由现有工具执行器返回失败结果。已有 `tools.local.json` 需将 `fetch_web_page` 的 `Enabled` 设为 `true`，保留其 `TimeoutSeconds` 配置，重新启动 Host 后可在群中发送 `123 请读取 https://example.com 并总结内容`。
 
 Host 启动时扫描 `AppContext.BaseDirectory/Plugins/` 的直接子目录。每个插件目录以入口程序集名称命名，例如 `Plugins/QQAIAgent.Tools/QQAIAgent.Tools.dll`。没有同名入口 DLL 的目录会跳过。依赖 DLL、`.deps.json`、`.pdb` 和其他运行资源保留在该目录及其子目录中，不作为插件入口重复扫描。
 

@@ -16,8 +16,8 @@
   {
     "Name": "fetch_web_page",
     "TimeoutSeconds": 60,
-    "Description": "获取指定网页的正文内容。",
+    "Description": "获取 HTTP 或 HTTPS 网页的静态正文，返回最终地址、标题和正文。不执行 JavaScript。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"需要获取内容的网页地址\"}},\"required\":[\"url\"]}",
-    "Enabled": false
+    "Enabled": true
   }
 ]

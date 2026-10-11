@@ -8,6 +8,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="HtmlAgilityPack" Version="1.13.0" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
     </ItemGroup>
 
