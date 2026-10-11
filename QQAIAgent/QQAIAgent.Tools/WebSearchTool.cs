@@ -24,7 +24,7 @@ public sealed class WebSearchTool : ITool, IDisposable
     }
 
     /// <summary>通过腾讯云 SearchPro 搜索，返回查询词、搜索结果、请求 ID 和服务提示。</summary>
-    public async Task<string> ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)
+    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);

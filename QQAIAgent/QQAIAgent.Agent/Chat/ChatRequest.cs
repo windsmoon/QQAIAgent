@@ -1,3 +1,5 @@
+using QQAIAgent.Abstractions;
+
 namespace QQAIAgent.Agent.Chat;
 
 public class ChatRequest
@@ -6,5 +8,6 @@ public class ChatRequest
     public required IReadOnlyList<ChatMessage> Messages { get; set; }
     public IReadOnlyList<ChatToolDefinition> Tools { get; set; } = [];
     public int? MaxOutputTokens { get; set; }
+    public ReasoningEffort ReasoningEffort { get; set; } = ReasoningEffort.Minimal;
     #endregion
 }

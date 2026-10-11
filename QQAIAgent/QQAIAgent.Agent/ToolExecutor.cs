@@ -9,7 +9,7 @@ public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToo
 {
     #region methods
     /// <summary>按顺序执行已启用的工具调用，返回带调用 ID 的工具消息；调用失败以结果文本返回，请求取消继续抛出。</summary>
-    public async Task<IReadOnlyList<ChatMessage>> ExecuteAsync(IReadOnlyList<ChatToolCall> toolCalls, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ChatMessage>> ExecuteAsync(IReadOnlyList<ChatToolCall> toolCalls, ToolContext context, CancellationToken cancellationToken)
     {
         var messages = new List<ChatMessage>(toolCalls.Count);
         foreach (var toolCall in toolCalls)
@@ -42,7 +42,7 @@ public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToo
                     try
                     {
                         // 工具未响应取消时也结束等待；工具自身仍需配合取消，才能停止实际工作。
-                        content = await tool.ExecuteAsync(toolCall.ArgumentsJson, timeout.Token).WaitAsync(timeout.Token);
+                        content = await tool.ExecuteAsync(toolCall.ArgumentsJson, context, timeout.Token).WaitAsync(timeout.Token);
                         logger.LogInformation("工具执行完成：结果字符数={ContentLength}，耗时={ElapsedMilliseconds:F0} ms",
                             content?.Length ?? 0, Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
                     }

@@ -35,7 +35,7 @@ public sealed class FetchWebPageTool : ITool, IDisposable
     }
 
     /// <summary>获取 HTTP/HTTPS 网页的静态正文，返回包含最终地址、标题和正文的 JSON。</summary>
-    public async Task<string> ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)
+    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);

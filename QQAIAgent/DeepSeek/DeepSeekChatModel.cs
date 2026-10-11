@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using QQAIAgent.Abstractions;
 using QQAIAgent.DeepSeek.Config;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
@@ -83,6 +84,11 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 ["role"] = role,
                 ["content"] = message.Content
             };
+            if (message.Role == ChatRole.Assistant && request.Tools.Count > 0)
+            {
+                // 携带工具时需回传思考内容；从非思考模式切换时，旧消息没有思考内容则传空串。
+                serializedMessage["reasoning_content"] = message.ReasoningContent ?? string.Empty;
+            }
             if (message is { Role: ChatRole.Assistant, ToolCalls.Count: > 0 })
             {
                 // 带工具调用的 assistant 消息可以没有文本，但必须保留调用 ID 和参数。
@@ -109,14 +115,27 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             messages.Add(serializedMessage);
         }
 
+        // 统一档位在模型类库内映射；DeepSeek 的 medium 与 high 使用同一实际档位。
+        var reasoningEffort = request.ReasoningEffort switch
+        {
+            ReasoningEffort.Minimal => null,
+            ReasoningEffort.Low => "low",
+            ReasoningEffort.Medium or ReasoningEffort.High => "high",
+            ReasoningEffort.Max => "max",
+            _ => throw new ArgumentOutOfRangeException(nameof(request), "不支持的思考强度。")
+        };
         var requestBody = new Dictionary<string, object>
         {
             ["model"] = _model,
             ["messages"] = messages,
             ["max_tokens"] = request.MaxOutputTokens,
             ["stream"] = false,
-            ["thinking"] = new { type = "disabled" }
+            ["thinking"] = new { type = reasoningEffort is null ? "disabled" : "enabled" }
         };
+        if (reasoningEffort is not null)
+        {
+            requestBody["reasoning_effort"] = reasoningEffort;
+        }
         if (request.Tools.Count > 0)
         {
             var tools = new List<object>(request.Tools.Count);
@@ -193,6 +212,10 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         }
 
         var text = content.GetString() ?? "";
+        var reasoningContent = responseMessage.TryGetProperty("reasoning_content", out var reasoning)
+            && reasoning.ValueKind == JsonValueKind.String
+                ? reasoning.GetString()
+                : null;
         var toolCalls = new List<ChatToolCall>();
         if (responseMessage.TryGetProperty("tool_calls", out var toolCallValues) && toolCallValues.ValueKind != JsonValueKind.Null)
         {
@@ -241,7 +264,13 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
 
         return new ChatResponse
         {
-            Message = new ChatMessage { Role = ChatRole.Assistant, Content = text, ToolCalls = toolCalls },
+            Message = new ChatMessage
+            {
+                Role = ChatRole.Assistant,
+                Content = text,
+                ReasoningContent = reasoningContent,
+                ToolCalls = toolCalls
+            },
             FinishReason = finishReason
         };
     }

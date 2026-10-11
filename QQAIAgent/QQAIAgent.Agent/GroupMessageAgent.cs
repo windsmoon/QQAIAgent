@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using QQAIAgent.Abstractions.Tools;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;
@@ -28,12 +29,15 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
         messages.Add(new ChatMessage { Role = ChatRole.User, Content = text });
 
+        // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
+        var toolContext = new ToolContext();
+
         for (var modelCall = 0; modelCall < config.MaxModelCalls; modelCall++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             using var roundScope = logger.BeginScope("轮次={ModelCall}/{MaxModelCalls}", modelCall + 1, config.MaxModelCalls);
 
-            logger.LogInformation("开始请求模型：消息数={MessageCount}", messages.Count);
+            logger.LogInformation("开始请求模型：消息数={MessageCount}，思考强度={ReasoningEffort}", messages.Count, toolContext.ReasoningEffort);
             var startedAt = Stopwatch.GetTimestamp();
             ChatResponse response;
             try
@@ -41,7 +45,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 response = await chatModel.CompleteAsync(new ChatRequest
                 {
                     Messages = messages,
-                    Tools = chatModel.SupportsToolCalling ? toolDefinitions : []
+                    Tools = chatModel.SupportsToolCalling ? toolDefinitions : [],
+                    ReasoningEffort = toolContext.ReasoningEffort
                 }, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -84,7 +89,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
             // 先保留完整的 assistant 工具调用消息，再按调用 ID 追加全部工具结果。
             messages.Add(response.Message);
-            var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, cancellationToken);
+            var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, toolContext, cancellationToken);
             messages.AddRange(toolMessages);
         }
 
