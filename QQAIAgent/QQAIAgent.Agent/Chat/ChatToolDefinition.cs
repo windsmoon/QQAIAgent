@@ -8,5 +8,7 @@ public class ChatToolDefinition
     public string ParametersJson { get; set; } = "";
     /// <summary>是否启用工具，未配置时默认启用。</summary>
     public bool Enabled { get; set; } = true;
+    /// <summary>每次调用该工具的超时秒数，未配置时默认为 30 秒。</summary>
+    public int TimeoutSeconds { get; set; } = 30;
     #endregion
 }

@@ -46,11 +46,13 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | 模板 | 本地配置 | 内容 | 读取方 |
 | --- | --- | --- | --- |
 | `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号 | Host |
-| `agent.example.json` | `agent.local.json` | 群白名单、每条请求的模型调用次数上限、单次工具调用超时秒数 | Host |
+| `agent.example.json` | `agent.local.json` | 群白名单、每条请求的模型调用次数上限 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
-| `tools.example.json` | `tools.local.json` | 工具定义及启用状态 | Host |
+| `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
 
 `tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具定义列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前配置中获取时间（`get_time`）开启，联网搜索（`web_search`）和获取网页（`fetch_web_page`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串。工具定义的 `Name` 与插件实现的 `ITool.Name` 对应；开关控制开放给模型的工具定义，不影响插件加载，也不限制 QQ 指令直接使用基础功能。
+
+每个工具对象的 `TimeoutSeconds` 控制该工具单次调用的超时秒数，填写正数，省略时默认为 30。当前配置中 `get_time` 为 5 秒、`web_search` 为 30 秒、`fetch_web_page` 为 60 秒。每次调用按对应工具的配置独立计时；超时后返回带原调用 ID 的工具失败消息，继续执行本轮剩余工具，再将结果交给模型处理。整个请求被取消时，仍然向上传递取消异常。该配置由工具执行器使用，不会发送给模型。
 
 构建和发布 Host 时，配置文件会复制到宿主程序目录的 `Config/`。运行时以 `AppContext.BaseDirectory` 定位文件，不依赖启动时的工作目录。DeepSeek 在模型实例创建时读取自己的配置，配置对象不注册到 Host 的依赖注入容器中。
 
@@ -59,20 +61,17 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 ```json
 {
   "AllowedGroups": [123456789],
-  "MaxModelCalls": 10,
-  "ToolTimeoutSeconds": 30
+  "MaxModelCalls": 10
 }
 ```
 
 `AllowedGroups` 填写允许处理的真实群号，空列表表示不处理任何群。`MaxModelCalls` 控制每条 QQ 请求最多调用模型的次数，省略时默认为 10，首次请求和生成最终回复的请求都计入。最后一次模型调用若仍请求工具，Agent 不再执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
 
-`ToolTimeoutSeconds` 控制每次工具调用的超时秒数，填写正数，省略时默认为 30。每个工具独立计时；超时后返回带原调用 ID 的工具失败消息，继续执行本轮剩余工具，再将结果交给模型处理。整个请求被取消时，仍然向上传递取消异常。
-
 ## 本地运行
 
 1. 准备 .NET 10 SDK，并在 NapCat 中配置正向 WebSocket 服务。
 2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写四份本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
-3. 在 `agent.local.json` 中填写群白名单、模型调用次数上限和工具超时秒数，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。
+3. 在 `agent.local.json` 中填写群白名单和模型调用次数上限，在 `tools.local.json` 中为每个工具填写 `TimeoutSeconds`，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。
 4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek 和内置工具插件；模型程序集复制到宿主输出目录，工具插件及其依赖复制到 `Plugins/QQAIAgent.Tools/`。
 5. 在白名单群中发送 `123 你好` 测试文本回复，或发送 `123 请用 get_time 获取当前时间` 测试工具调用。模型请求获取时间时，Agent 执行 `GetTimeTool`，将结果交回模型生成最终回答，再回复该群。
 
@@ -92,12 +91,12 @@ Host 启动时扫描 `AppContext.BaseDirectory/Plugins/` 的直接子目录。�
 
 1. 创建目标框架为 `net10.0` 的类库，引用 `QQAIAgent.Abstractions`，添加一个或多个公开的 `ITool` 实现。
 2. 在插件项目中设置 `<EnableDynamicLoading>true</EnableDynamicLoading>`。对接口项目的引用设置 `Private="false"` 和 `ExcludeAssets="runtime"`，接口程序集由 Host 提供。
-3. 将插件完整构建输出放到宿主的 `Plugins/程序集名称/`，在 `tools.local.json` 中按每个工具的名称填写定义和开关，然后重新启动 Host。
+3. 将插件完整构建输出放到宿主的 `Plugins/程序集名称/`，在 `tools.local.json` 中按每个工具的名称填写定义、开关和超时秒数，然后重新启动 Host。
 4. 如果插件源码也在当前解决方案中，并希望运行 Host 时自动构建它，在 Host 中添加与内置插件相同的项目引用元数据：`ReferenceOutputAssembly="false"`、`Private="false"` 和 `OutputItemType="ToolPluginAssembly"`。现有复制任务会自动处理该插件输出。
 
 `Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现、注册、模型工具调用响应解析和 Agent 的 `ToolExecutor` 已接入，群消息入口通过 Agent 循环完成工具执行与模型后续调用。
 
-Host 将 `ToolExecutor` 注册为单例，执行器通过构造函数获取 `AgentConfig`、全部插件 `IEnumerable<ITool>` 和启用的工具定义。`ExecuteAsync(IReadOnlyList<ChatToolCall>, CancellationToken)` 按返回顺序逐个匹配工具名称，将参数 JSON 字符串直接交给对应的 `ITool.ExecuteAsync`，每次调用的结果整理为 `ChatRole.Tool` 消息，保留原调用 ID 到 `ToolCallId`。执行器只允许配置中已启用的工具；未启用、未配置、未加载、执行失败或超时的调用会返回错误结果消息，后续工具调用继续处理。请求取消会向上传递。每次执行的结果列表保留在方法内部，不共享请求状态。
+Host 将 `ToolExecutor` 注册为单例，执行器通过构造函数获取全部插件 `IEnumerable<ITool>` 和启用的工具定义。`ExecuteAsync(IReadOnlyList<ChatToolCall>, CancellationToken)` 按返回顺序逐个匹配工具名称，读取对应定义的 `TimeoutSeconds`，将参数 JSON 字符串直接交给对应的 `ITool.ExecuteAsync`，每次调用的结果整理为 `ChatRole.Tool` 消息，保留原调用 ID 到 `ToolCallId`。执行器只允许配置中已启用的工具；未启用、未配置、未加载、执行失败或超时的调用会返回错误结果消息，后续工具调用继续处理。请求取消会向上传递。每次执行的结果列表保留在方法内部，不共享请求状态。
 
 执行器为每次工具调用创建关联请求取消和超时的令牌，并通过 `WaitAsync` 在取消时结束对工具任务的等待。插件应使用异步 API，并向内部操作传递收到的 `CancellationToken`；忽略令牌的任务可能在超时后继续运行，返回任务前的同步阻塞代码也无法由 `WaitAsync` 中断。
 
