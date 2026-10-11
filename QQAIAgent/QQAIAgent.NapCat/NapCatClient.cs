@@ -2,13 +2,14 @@ using System.Globalization;
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
 using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.NapCat;
 
-public class NapCatClient(NapCatConfig config) : IMessageSender, IMessageReader, IDisposable
+public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
 {
     #region fields
     private readonly ClientWebSocket _socket = new();
@@ -222,32 +223,54 @@ public class NapCatClient(NapCatConfig config) : IMessageSender, IMessageReader,
         {
             while (cancellationToken.IsCancellationRequested == false)
             {
-                using var message = await ReceiveMessageAsync(cancellationToken);
-                if (message is null)
+                JsonDocument? message;
+                try
                 {
-                    return;
+                    message = await ReceiveMessageAsync(cancellationToken);
                 }
-
-                var root = message.RootElement;
-                // API responses and events share this connection; only complete the request with a matching echo.
-                if (root.TryGetProperty("echo", out var echo) && echo.ValueKind == JsonValueKind.String)
+                catch (JsonException exception) when (cancellationToken.IsCancellationRequested == false)
                 {
-                    lock (_responseLock)
-                    {
-                        if (echo.GetString() == _pendingEcho)
-                        {
-                            // The document is disposed after dispatch, so the pending request needs its own JSON data.
-                            _pendingResponse?.TrySetResult(root.Clone());
-                        }
-                    }
-
+                    // 已收完当前消息的全部分片，JSON 无效时可以直接接收下一条。
+                    logger.LogWarning(exception, "NapCat 消息 JSON 解析失败，已跳过当前消息。");
                     continue;
                 }
 
-                var groupMessage = ParseGroupMessageEvent(root);
-                if (groupMessage is not null)
+                using (message)
                 {
-                    GroupMessageReceived?.Invoke(groupMessage);
+                    if (message is null)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        var root = message.RootElement;
+                        // API responses and events share this connection; only complete the request with a matching echo.
+                        if (root.TryGetProperty("echo", out var echo) && echo.ValueKind == JsonValueKind.String)
+                        {
+                            lock (_responseLock)
+                            {
+                                if (echo.GetString() == _pendingEcho)
+                                {
+                                    // The document is disposed after dispatch, so the pending request needs its own JSON data.
+                                    _pendingResponse?.TrySetResult(root.Clone());
+                                }
+                            }
+
+                            continue;
+                        }
+
+                        var groupMessage = ParseGroupMessageEvent(root);
+                        if (groupMessage is not null)
+                        {
+                            GroupMessageReceived?.Invoke(groupMessage);
+                        }
+                    }
+                    catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
+                    {
+                        // 单条消息的字段解析或回调失败，不影响后续消息和 API 响应的接收。
+                        logger.LogWarning(exception, "NapCat 消息解析或分发失败，已跳过当前消息。");
+                    }
                 }
             }
         }
