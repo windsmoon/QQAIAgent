@@ -97,13 +97,16 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         }
 
         // 按原消息顺序取第一个文本段匹配指令，跳过前面的非文本段。
-        var text = message.MessageContentList
+        var textContent = message.MessageContentList
             .OfType<TextContent>()
-            .FirstOrDefault()?.Text.TrimStart() ?? "";
+            .FirstOrDefault();
+        var text = textContent?.Text.TrimStart() ?? "";
         if (text.StartsWith("123") == false)
         {
             return;
         }
+        // 合法请求入队前移除触发前缀，保留其他消息段及其顺序。
+        textContent.Text = text[3..];
         logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，消息段数={ContentCount}，开头文本={Text}",
             message.GroupId, message.SenderId, message.MessageContentList.Count, text);
 

@@ -15,4 +15,8 @@
       <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Chat\Content\" />
+    </ItemGroup>
+
 </Project>
