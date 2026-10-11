@@ -9,7 +9,7 @@ public class ImageContent : MessageContent
     public string Url { get; set; } = "";
     public string Summary { get; set; } = "";
     /// <summary>图片子类型，保留消息来源提供的值。</summary>
-    public int SubType { get; set; }
+    public ImageSubType SubType { get; set; }
     /// <summary>图片文件大小，单位为字节；未提供时为 0。</summary>
     public long FileSize { get; set; }
     #endregion
