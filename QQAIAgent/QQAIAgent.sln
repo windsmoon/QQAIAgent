@@ -28,6 +28,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Abstractions", "Q
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Tools", "QQAIAgent.Tools\QQAIAgent.Tools.csproj", "{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Infrastructure", "QQAIAgent.Infrastructure\QQAIAgent.Infrastructure.csproj", "{6D009E37-AF1D-434B-92D4-60552BAA8AC7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -62,5 +64,9 @@ Global
 		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DB9E59FB-8A3C-4D75-B9AC-9C1B43EED34E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6D009E37-AF1D-434B-92D4-60552BAA8AC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D009E37-AF1D-434B-92D4-60552BAA8AC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D009E37-AF1D-434B-92D4-60552BAA8AC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D009E37-AF1D-434B-92D4-60552BAA8AC7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
