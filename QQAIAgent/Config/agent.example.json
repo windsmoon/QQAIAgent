@@ -1,4 +1,5 @@
 {
   "AllowedGroups": [],
-  "MaxModelCalls": 10
+  "MaxModelCalls": 20,
+  "ToolTimeoutSeconds": 30
 }
