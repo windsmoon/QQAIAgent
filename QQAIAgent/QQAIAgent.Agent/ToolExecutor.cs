@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
+using QQAIAgent.Agent.Chat.Content;
 
 namespace QQAIAgent.Agent;
 
@@ -69,7 +70,7 @@ public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToo
             {
                 Role = ChatRole.Tool,
                 ToolCallId = toolCall.Id,
-                Content = content
+                ContentList = [new ChatTextContent { Text = content }]
             });
         }
 

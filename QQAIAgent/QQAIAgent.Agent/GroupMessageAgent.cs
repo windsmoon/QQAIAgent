@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
+using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
@@ -29,7 +30,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         // 系统提示词放在最前面，并随工具调用消息保留到本次请求结束。
         if (string.IsNullOrWhiteSpace(config.SystemPrompt) == false)
         {
-            messages.Add(new ChatMessage { Role = ChatRole.System, Content = config.SystemPrompt });
+            messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = config.SystemPrompt }] });
         }
 
         // 处理引用
@@ -38,7 +39,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             return null;
         }
 
-        messages.Add(new ChatMessage { Role = ChatRole.User, Content = text });
+        messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = text }] });
 
         // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
         var toolContext = new ToolContext();
@@ -77,19 +78,22 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 throw;
             }
 
+            var responseText = string.Concat(response.Message.ContentList
+                .OfType<ChatTextContent>()
+                .Select(content => content.Text));
             logger.LogInformation("模型请求完成：结束原因={FinishReason}，工具调用数={ToolCallCount}，回复字符数={ContentLength}，耗时={ElapsedMilliseconds:F0} ms",
-                response.FinishReason, response.Message.ToolCalls.Count, response.Message.Content?.Length ?? 0,
+                response.FinishReason, response.Message.ToolCalls.Count, responseText.Length,
                 Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
             if (response.FinishReason != ChatFinishReason.ToolCalls)
             {
-                if (string.IsNullOrWhiteSpace(response.Message.Content))
+                if (string.IsNullOrWhiteSpace(responseText))
                 {
                     logger.LogWarning("模型回复内容为空，将发送空回复提示。");
                     return await messageSender.SendGroupMessageAsync(message.GroupId, "回复内容为空", cancellationToken);
                 }
 
-                return await messageSender.SendGroupMessageAsync(message.GroupId, response.Message.Content, cancellationToken);
+                return await messageSender.SendGroupMessageAsync(message.GroupId, responseText, cancellationToken);
             }
 
             // 已无下一次模型调用机会时停止，避免执行无法继续交给模型的工具调用。
@@ -141,7 +145,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             messageList.Insert(referenceContextIndex, new ChatMessage
             {
                 Role = ChatRole.User,
-                Content = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n{refText}"
+                ContentList =
+                [
+                    new ChatTextContent
+                    {
+                        Text = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n{refText}"
+                    }
+                ]
             });
             refMessageId = refMessage.RefMessageId;
         }

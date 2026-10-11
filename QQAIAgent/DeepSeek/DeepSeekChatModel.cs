@@ -5,6 +5,7 @@ using QQAIAgent.Abstractions;
 using QQAIAgent.DeepSeek.Config;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
+using QQAIAgent.Agent.Chat.Content;
 
 namespace QQAIAgent.DeepSeek;
 
@@ -79,10 +80,16 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 _ => throw new NotSupportedException($"当前 DeepSeek 实现不支持 {message.Role} 角色。")
             };
 
+            // 当前适配仍发送纯文本，未接入的内容段不能静默丢弃。
+            var text = string.Concat(message.ContentList.Select(content => content switch
+            {
+                ChatTextContent textContent => textContent.Text,
+                _ => throw new NotSupportedException("当前 DeepSeek 适配尚未接入非文本内容。")
+            }));
             var serializedMessage = new Dictionary<string, object>
             {
                 ["role"] = role,
-                ["content"] = message.Content
+                ["content"] = text
             };
             if (message.Role == ChatRole.Assistant && request.Tools.Count > 0)
             {
@@ -107,7 +114,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             {
                 serializedMessage["tool_call_id"] = message.ToolCallId;
             }
-            else if (message.Role != ChatRole.User && string.IsNullOrEmpty(message.Content))
+            else if (message.Role != ChatRole.User && string.IsNullOrEmpty(text))
             {
                 throw new ArgumentException("非 User 消息，纯文本消息内容不能为空。", nameof(request));
             }
@@ -267,7 +274,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             Message = new ChatMessage
             {
                 Role = ChatRole.Assistant,
-                Content = text,
+                ContentList = [new ChatTextContent { Text = text }],
                 ReasoningContent = reasoningContent,
                 ToolCalls = toolCalls
             },
