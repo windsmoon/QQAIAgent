@@ -13,6 +13,7 @@
     <ItemGroup>
       <ProjectReference Include="..\QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj" />
       <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" />
+      <ProjectReference Include="..\QQAIAgent.Infrastructure\QQAIAgent.Infrastructure.csproj" />
     </ItemGroup>
 
     <ItemGroup>

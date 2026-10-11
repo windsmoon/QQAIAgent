@@ -14,6 +14,10 @@
 
 调用日志记录每轮模型请求的开始、结束原因、工具调用数、回复字符数和耗时，以及每个工具的开始、完成、结果字符数和耗时。模型失败、工具失败、超时或跳过、空回复和次数上限使用 Warning 日志，请求取消使用 Information 日志。日志作用域携带群号、发送者、模型轮次及工具名称、调用 ID，便于追踪完整请求。控制台时间戳和作用域显示由 `QQAIAgent.Host/appsettings.json` 中的 `Logging.Console.FormatterOptions` 配置。
 
+进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。数据库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
+
+数据库路径由 `QQAIAgent.Host/appsettings.json` 中的 `Database.Path` 配置，默认是程序目录下的 `Data/qqaiaagent.sqlite3`。Host 在连接 NapCat 前创建目录、表和统计视图，并启用 WAL。`request_statistics` 提供每个请求的模型和工具调用次数，`tool_usage` 按机器人 QQ、群号、用户 QQ 和工具名称汇总使用次数及状态。历史统计不作为后续请求的模型上下文；参考库中的旧数据不自动导入。
+
 - 所有群共用一个容量为 100 的消息队列，按顺序完成每条消息的模型与工具调用和 QQ 回复。
 - 模型实例作为单例复用，每条 QQ 请求单独维护消息列表，包含当前问题和本次调用的模型、工具消息，请求结束后不保存历史上下文。
 - DeepSeek 在自己的项目中读取配置，并维护一个复用的 `HttpClient`。
@@ -115,14 +119,14 @@ Host 启动时扫描 `AppContext.BaseDirectory/Plugins/` 的直接子目录。�
 
 `Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现、注册、模型工具调用响应解析和 Agent 的 `ToolExecutor` 已接入，群消息入口通过 Agent 循环完成工具执行与模型后续调用。
 
-Host 将 `ToolExecutor` 注册为单例，执行器通过构造函数获取全部插件 `IEnumerable<ITool>` 和启用的工具定义。`ExecuteAsync(IReadOnlyList<ChatToolCall>, CancellationToken)` 按返回顺序逐个匹配工具名称，读取对应定义的 `TimeoutSeconds`，将参数 JSON 字符串直接交给对应的 `ITool.ExecuteAsync`，每次调用的结果整理为 `ChatRole.Tool` 消息，保留原调用 ID 到 `ToolCallId`。执行器只允许配置中已启用的工具；未启用、未配置、未加载、执行失败或超时的调用会返回错误结果消息，后续工具调用继续处理。请求取消会向上传递。每次执行的结果列表保留在方法内部，不共享请求状态。
+Host 将 `ToolExecutor` 注册为单例，执行器通过构造函数获取全部插件 `IEnumerable<ITool>`、启用的工具定义和 `RequestStatistics`。`ExecuteAsync(IReadOnlyList<ChatToolCall>, ToolContext, string requestId, string modelCallId, CancellationToken)` 按返回顺序逐个匹配工具名称，读取对应定义的 `TimeoutSeconds`，将参数 JSON 字符串直接交给对应的 `ITool.ExecuteAsync`，每次调用的结果整理为 `ChatRole.Tool` 消息，保留原调用 ID 到 `ToolCallId`。请求 ID 和模型调用 ID 只用于关联统计记录。执行器只允许配置中已启用的工具；未启用、未配置、未加载、执行失败或超时的调用会返回错误结果消息，后续工具调用继续处理。请求取消会向上传递。每次执行的结果列表保留在方法内部，不共享请求状态。
 
 执行器为每次工具调用创建关联请求取消和超时的令牌，并通过 `WaitAsync` 在取消时结束对工具任务的等待。插件应使用异步 API，并向内部操作传递收到的 `CancellationToken`；忽略令牌的任务可能在超时后继续运行，返回任务前的同步阻塞代码也无法由 `WaitAsync` 中断。
 
 `GroupMessageAgent` 通过构造函数获取执行器，在每轮工具调用时执行：
 
 ```csharp
-var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, cancellationToken);
+var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, toolContext, requestId, modelCallId, cancellationToken);
 ```
 
 ## 模型调用与部署

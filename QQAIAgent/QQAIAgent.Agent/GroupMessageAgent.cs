@@ -4,12 +4,13 @@ using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Config;
+using QQAIAgent.Agent.Statistics;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
 
 namespace QQAIAgent.Agent;
 
-public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, ILogger<GroupMessageAgent> logger)
+public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
 {
     #region fields
     #endregion
@@ -18,8 +19,38 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     /// <summary>处理群消息，通过模型与工具的多轮调用生成最终回复，返回回复消息 ID。</summary>
     public async Task<long?> HandleMessageAsync(GroupMessage message, CancellationToken cancellationToken)
     {
-        using var requestScope = logger.BeginScope("群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+        var requestId = await statistics.StartRequestAsync(botAccount, message.GroupId, message.SenderId, cancellationToken);
+        using var requestScope = logger.BeginScope("请求={RequestId}，群={GroupId}，发送者={SenderId}", requestId, message.GroupId, message.SenderId);
+        var startedAt = Stopwatch.GetTimestamp();
+        var status = "failed";
+        var errorType = "";
+        try
+        {
+            var result = await HandleRequestAsync(message, requestId, cancellationToken);
+            status = result.Status;
+            return result.MessageId;
+        }
+        catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
+        {
+            status = "cancelled";
+            errorType = exception.GetType().Name;
+            throw;
+        }
+        catch (Exception exception)
+        {
+            errorType = exception.GetType().Name;
+            throw;
+        }
+        finally
+        {
+            // 请求令牌可能已经取消，结束状态仍需写入；只保存异常类型，不保存异常正文。
+            await statistics.FinishRequestAsync(requestId, status,
+                (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, errorType, CancellationToken.None);
+        }
+    }
 
+    private async Task<(long? MessageId, string Status)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
+    {
         // 消息接收端已筛选出需要处理的消息，并移除了 "123" 前缀。
         // 按原顺序转换文本和图片，不跨图片拼接或裁剪文本段。
         var chatContentList = new List<ChatContent>();
@@ -33,9 +64,9 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
 
         // 处理引用
-        if (await ParseReferenceAsync(messages, message, cancellationToken) == false)
+        if (await ParseReferenceAsync(messages, message, requestId, cancellationToken) == false)
         {
-            return null;
+            return (null, "reference_failed");
         }
 
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = chatContentList });
@@ -49,6 +80,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             using var roundScope = logger.BeginScope("轮次={ModelCall}/{MaxModelCalls}", modelCall + 1, config.MaxModelCalls);
 
             logger.LogInformation("开始请求模型：消息数={MessageCount}，思考强度={ReasoningEffort}", messages.Count, toolContext.ReasoningEffort);
+            var modelCallId = await statistics.StartModelCallAsync(requestId, modelCall + 1, toolContext.ReasoningEffort, cancellationToken);
             var startedAt = Stopwatch.GetTimestamp();
             ChatResponse response;
             try
@@ -60,22 +92,29 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     ReasoningEffort = toolContext.ReasoningEffort
                 }, cancellationToken);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
             {
+                await statistics.FinishModelCallAsync(modelCallId, "cancelled", "",
+                    (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, exception.GetType().Name, CancellationToken.None);
                 logger.LogInformation("模型请求已取消：耗时={ElapsedMilliseconds:F0} ms", Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
                 throw;
             }
             catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
             {
+                await statistics.FinishModelCallAsync(modelCallId, exception is OperationCanceledException ? "timeout" : "failed", "",
+                    (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, exception.GetType().Name, CancellationToken.None);
                 logger.LogWarning("模型请求失败：超时={IsTimeout}，耗时={ElapsedMilliseconds:F0} ms，原因={Reason}",
                     exception is OperationCanceledException, Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, exception.Message);
                 var failureText = exception is OperationCanceledException
                     ? "模型请求超时，请稍后再试"
                     : "模型请求失败，请稍后再试";
-                await messageSender.SendGroupMessageAsync(message.GroupId, failureText, cancellationToken);
+                await SendReplyAsync(requestId, message.GroupId, failureText, cancellationToken);
                 // 提示发送后继续抛出原异常，由宿主记录日志并处理下一条消息。
                 throw;
             }
+
+            await statistics.FinishModelCallAsync(modelCallId, "completed", response.FinishReason.ToString(),
+                (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, "", CancellationToken.None);
 
             var responseText = string.Concat(response.Message.ContentList
                 .OfType<ChatTextContent>()
@@ -89,10 +128,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 if (string.IsNullOrWhiteSpace(responseText))
                 {
                     logger.LogWarning("模型回复内容为空，将发送空回复提示。");
-                    return await messageSender.SendGroupMessageAsync(message.GroupId, "回复内容为空", cancellationToken);
+                    return (await SendReplyAsync(requestId, message.GroupId, "回复内容为空", cancellationToken), "empty_response");
                 }
 
-                return await messageSender.SendGroupMessageAsync(message.GroupId, responseText, cancellationToken);
+                return (await SendReplyAsync(requestId, message.GroupId, responseText, cancellationToken), "completed");
             }
 
             // 已无下一次模型调用机会时停止，避免执行无法继续交给模型的工具调用。
@@ -103,12 +142,19 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
             // 先保留完整的 assistant 工具调用消息，再按调用 ID 追加全部工具结果。
             messages.Add(response.Message);
-            var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, toolContext, cancellationToken);
+            var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, toolContext, requestId, modelCallId, cancellationToken);
             messages.AddRange(toolMessages);
         }
 
         logger.LogWarning("已达到模型调用次数上限：上限={MaxModelCalls}", config.MaxModelCalls);
-        return await messageSender.SendGroupMessageAsync(message.GroupId, "已达到模型调用次数上限，请重新发起请求", cancellationToken);
+        return (await SendReplyAsync(requestId, message.GroupId, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit");
+    }
+
+    private async Task<long> SendReplyAsync(string requestId, long groupId, string text, CancellationToken cancellationToken)
+    {
+        var messageId = await messageSender.SendGroupMessageAsync(groupId, text, cancellationToken);
+        await statistics.RecordReplyAsync(requestId, messageId, CancellationToken.None);
+        return messageId;
     }
 
     private static void AppendChatContents(List<ChatContent> chatContentList, List<MessageContent> messageContentList, bool isReference)
@@ -145,7 +191,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
     }
 
-    private async Task<bool> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, CancellationToken cancellationToken)
+    private async Task<bool> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, string requestId, CancellationToken cancellationToken)
     {
         var referenceContextIndex = messageList.Count;
         var refMessageId = groupMessage.RefMessageId;
@@ -159,7 +205,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             }
             catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
             {
-                await messageSender.SendGroupMessageAsync(groupMessage.GroupId, "获取引用消息失败，请稍后再试", cancellationToken);
+                await SendReplyAsync(requestId, groupMessage.GroupId, "获取引用消息失败，请稍后再试", cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 return false;
                 // logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);
