@@ -49,11 +49,11 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | `agent.example.json` | `agent.local.json` | 群白名单、每条请求的模型调用次数上限 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
-| `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 预留，尚未接入 |
+| `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 联网搜索工具 |
 
-`websearch.local.json` 中的 `ApiKey` 和 `Endpoint` 默认均为空，分别填写搜索服务的 API Key 和完整请求地址。当前仅提供配置文件及对应的 `WebSearchConfig` 类型，联网搜索工具尚未实现，暂不读取此配置。
+`websearch.local.json` 使用腾讯云联网搜索的服务 API KEY 接入方式，`ApiKey` 填写联网搜索服务密钥，`Endpoint` 填写完整请求地址，模板为 `https://api.wsa.cloud.tencent.com/SearchPro`。密钥获取与接口说明见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。配置在每次调用联网搜索时读取，未调用搜索时不读取该文件。
 
-`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具定义列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前模板中获取时间（`get_time`）和获取网页（`fetch_web_page`）开启，联网搜索（`web_search`）关闭。`ParametersJson` 保存工具参数的 JSON Schema 字符串。工具定义的 `Name` 与插件实现的 `ITool.Name` 对应；开关控制开放给模型的工具定义，不影响插件加载，也不限制 QQ 指令直接使用基础功能。
+`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具定义列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前模板中获取时间（`get_time`）、联网搜索（`web_search`）和获取网页（`fetch_web_page`）均开启。`ParametersJson` 保存工具参数的 JSON Schema 字符串。工具定义的 `Name` 与插件实现的 `ITool.Name` 对应；开关控制开放给模型的工具定义，不影响插件加载，也不限制 QQ 指令直接使用基础功能。
 
 每个工具对象的 `TimeoutSeconds` 控制该工具单次调用的超时秒数，填写正数，省略时默认为 30。当前配置中 `get_time` 为 5 秒、`web_search` 为 30 秒、`fetch_web_page` 为 60 秒。每次调用按对应工具的配置独立计时；超时后返回带原调用 ID 的工具失败消息，继续执行本轮剩余工具，再将结果交给模型处理。整个请求被取消时，仍然向上传递取消异常。该配置由工具执行器使用，不会发送给模型。
 
@@ -73,16 +73,20 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 ## 本地运行
 
 1. 准备 .NET 10 SDK，并在 NapCat 中配置正向 WebSocket 服务。
-2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写四份本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
-3. 在 `agent.local.json` 中填写群白名单和模型调用次数上限，在 `tools.local.json` 中为每个工具填写 `TimeoutSeconds`，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。
+2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
+3. 在 `agent.local.json` 中填写群白名单和模型调用次数上限，在 `tools.local.json` 中为每个工具填写 `TimeoutSeconds`，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。使用联网搜索时，在 `websearch.local.json` 中填写腾讯云联网搜索服务 API Key 和完整请求地址；不使用时将 `web_search` 的 `Enabled` 设为 `false`。
 4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek 和内置工具插件；模型程序集复制到宿主输出目录，工具插件及其依赖复制到 `Plugins/QQAIAgent.Tools/`。
 5. 在白名单群中发送 `123 你好` 测试文本回复，或发送 `123 请用 get_time 获取当前时间` 测试工具调用。模型请求获取时间时，Agent 执行 `GetTimeTool`，将结果交回模型生成最终回答，再回复该群。
 
-修改源目录中的 JSON 后，需要将更新后的配置复制到宿主程序目录的 `Config/`；重新构建 Host 会按项目配置执行复制。配置在启动或模型实例创建时读取，更新后需要重新启动宿主才能生效。
+修改源目录中的 JSON 后，需要将更新后的配置复制到宿主程序目录的 `Config/`；重新构建 Host 会按项目配置执行复制。NapCat、Agent 和工具定义配置在启动时读取，DeepSeek 配置在模型实例创建时读取，更新后需要重新启动宿主才能生效。联网搜索配置在每次调用时读取，更新宿主目录中的该文件后，下次搜索即可生效。
 
 ## 工具插件
 
-`QQAIAgent.Abstractions` 定义 `ITool` 接口。插件通过 `Name` 标识工具，`ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)` 接收参数 JSON，返回文本或 JSON 字符串。`QQAIAgent.Tools` 是内置插件项目，当前包含 `GetTimeTool` 和 `FetchWebPageTool`。`get_time` 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移。
+`QQAIAgent.Abstractions` 定义 `ITool` 接口。插件通过 `Name` 标识工具，`ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)` 接收参数 JSON，返回文本或 JSON 字符串。`QQAIAgent.Tools` 是内置插件项目，当前包含 `GetTimeTool`、`WebSearchTool` 和 `FetchWebPageTool`。`get_time` 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移。
+
+`web_search` 接收 `{"query":"搜索关键词或问题"}`，通过腾讯云 `SearchPro` 接口搜索公开网页。请求使用 `Authorization: Bearer API_KEY` 和 JSON 字段 `Query`。结果为包含 `query`、`results`、`requestId` 和 `message` 的 JSON，其中 `results` 将接口的 `Pages` JSON 字符串数组解码为对象数组，保留标题、摘要、来源地址、发布时间等原始字段；无结果时返回空数组，`message` 保留服务提示，未提供时为 `null`。HTTP 失败和腾讯云 `Response.Error` 交给现有工具执行器返回失败结果。工具复用一个 `HttpClient`，由宿主退出时释放，超时和取消沿用工具执行器的配置。
+
+已有 `tools.local.json` 需将 `web_search` 的 `Enabled` 设为 `true`，并填写 `websearch.local.json`，重新启动 Host 后可在白名单群中发送 `123 请用 web_search 搜索今天的科技新闻`。
 
 `fetch_web_page` 接收 `{"url":"https://example.com"}`，支持 HTTP/HTTPS、自动重定向、压缩响应以及 HTML 和纯文本内容。结果为包含 `url`（重定向后的最终地址）、`title` 和 `content` 的 JSON。HTML 使用 HtmlAgilityPack 解析，优先提取 `main`，没有时提取 `body`，过滤脚本、样式、注释和显式隐藏的内容，并保留段落换行。响应头未声明编码时读取 HTML 的 meta 编码，支持 UTF-8、GBK、GB2312 等编码及 BOM。工具复用一个 `HttpClient`，由宿主退出时释放，网络请求使用工具执行器传入的取消令牌和超时配置。
 
@@ -140,7 +144,8 @@ var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, c
     ├── napcat.local.json
     ├── agent.local.json
     ├── deepseek.local.json
-    └── tools.local.json
+    ├── tools.local.json
+    └── websearch.local.json
 ```
 
 以上仅列出主要文件，宿主的其他运行依赖仍需随发布输出一起部署。
