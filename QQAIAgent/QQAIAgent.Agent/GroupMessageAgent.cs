@@ -28,6 +28,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         {
             var result = await HandleRequestAsync(message, requestId, cancellationToken);
             status = result.Status;
+            errorType = result.ErrorType;
             return result.MessageId;
         }
         catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
@@ -49,7 +50,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
     }
 
-    private async Task<(long? MessageId, string Status)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
+    private async Task<(long? MessageId, string Status, string ErrorType)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
     {
         // 消息接收端已筛选出需要处理的消息，并移除了 "123" 前缀。
         // 按原顺序转换文本和图片，不跨图片拼接或裁剪文本段。
@@ -64,9 +65,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
 
         // 处理引用
-        if (await ParseReferenceAsync(messages, message, requestId, cancellationToken) == false)
+        var referenceResult = await ParseReferenceAsync(messages, message, requestId, cancellationToken);
+        if (referenceResult.Success == false)
         {
-            return (null, "reference_failed");
+            return (null, "reference_failed", referenceResult.ErrorType);
         }
 
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = chatContentList });
@@ -128,10 +130,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 if (string.IsNullOrWhiteSpace(responseText))
                 {
                     logger.LogWarning("模型回复内容为空，将发送空回复提示。");
-                    return (await SendReplyAsync(requestId, message.GroupId, "回复内容为空", cancellationToken), "empty_response");
+                    return (await SendReplyAsync(requestId, message.GroupId, "回复内容为空", cancellationToken), "empty_response", "");
                 }
 
-                return (await SendReplyAsync(requestId, message.GroupId, responseText, cancellationToken), "completed");
+                return (await SendReplyAsync(requestId, message.GroupId, responseText, cancellationToken), "completed", "");
             }
 
             // 已无下一次模型调用机会时停止，避免执行无法继续交给模型的工具调用。
@@ -147,7 +149,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
 
         logger.LogWarning("已达到模型调用次数上限：上限={MaxModelCalls}", config.MaxModelCalls);
-        return (await SendReplyAsync(requestId, message.GroupId, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit");
+        return (await SendReplyAsync(requestId, message.GroupId, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit", "");
     }
 
     private async Task<long> SendReplyAsync(string requestId, long groupId, string text, CancellationToken cancellationToken)
@@ -191,7 +193,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
     }
 
-    private async Task<bool> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, string requestId, CancellationToken cancellationToken)
+    private async Task<(bool Success, string ErrorType)> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, string requestId, CancellationToken cancellationToken)
     {
         var referenceContextIndex = messageList.Count;
         var refMessageId = groupMessage.RefMessageId;
@@ -207,7 +209,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             {
                 await SendReplyAsync(requestId, groupMessage.GroupId, "获取引用消息失败，请稍后再试", cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                return false;
+                return (false, exception.GetType().Name);
                 // logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);
             }
 
@@ -227,7 +229,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             refMessageId = refMessage.RefMessageId;
         }
 
-        return true;
+        return (true, "");
     }
     #endregion
 }
