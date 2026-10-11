@@ -22,7 +22,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         // 消息接收端已筛选出需要处理的消息，并移除了 "123" 前缀。
         // 按原顺序转换文本和图片，不跨图片拼接或裁剪文本段。
-        var contentList = ConvertMessageContents(message.MessageContentList, isReference: false);
+        var chatContentList = new List<ChatContent>();
+        AppendChatContents(chatContentList, message.MessageContentList, isReference: false);
         // 消息列表只属于本次请求，不与其他用户或后续请求共享上下文。
         var messages = new List<ChatMessage>();
         // 系统提示词放在最前面，并随工具调用消息保留到本次请求结束。
@@ -37,7 +38,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             return null;
         }
 
-        messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = contentList });
+        messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = chatContentList });
 
         // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
         var toolContext = new ToolContext();
@@ -110,21 +111,20 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         return await messageSender.SendGroupMessageAsync(message.GroupId, "已达到模型调用次数上限，请重新发起请求", cancellationToken);
     }
 
-    private static List<ChatContent> ConvertMessageContents(List<MessageContent> messageContentList, bool isReference)
+    private static void AppendChatContents(List<ChatContent> chatContentList, List<MessageContent> messageContentList, bool isReference)
     {
-        var contentList = new List<ChatContent>();
         foreach (var content in messageContentList)
         {
             switch (content)
             {
                 case TextContent textContent:
-                    contentList.Add(new ChatTextContent { Text = textContent.Text });
+                    chatContentList.Add(new ChatTextContent { Text = textContent.Text });
                     break;
                 case ImageContent imageContent:
-                    contentList.Add(new ChatImageContent { Url = imageContent.Url });
+                    chatContentList.Add(new ChatImageContent { Url = imageContent.Url });
                     break;
                 case AtContent atContent:
-                    contentList.Add(new ChatTextContent
+                    chatContentList.Add(new ChatTextContent
                     {
                         Text = atContent.Target == "all" ? "@全体成员" : $"@{atContent.Target}"
                     });
@@ -138,13 +138,11 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                             UnknownContent unknownContent => $"[未支持的消息段：{unknownContent.OriginalType}]",
                             _ => $"[未支持的消息段：{content.ContentType}]"
                         };
-                        contentList.Add(new ChatTextContent { Text = text });
+                        chatContentList.Add(new ChatTextContent { Text = text });
                     }
                     break;
             }
         }
-
-        return contentList;
     }
 
     private async Task<bool> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, CancellationToken cancellationToken)
@@ -168,11 +166,12 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             }
 
             // 引用说明作为独立文本段放在正文之前，图片保留在原位置。
-            var contentList = ConvertMessageContents(refMessage.MessageContentList, isReference: true);
-            contentList.Insert(0, new ChatTextContent
+            var contentList = new List<ChatContent>();
+            contentList.Add(new ChatTextContent
             {
                 Text = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n"
             });
+            AppendChatContents(contentList, refMessage.MessageContentList, isReference: true);
             // 每层都插到系统消息之后，让更早的引用排在前面；引用正文不处理触发前缀。
             messageList.Insert(referenceContextIndex, new ChatMessage
             {
