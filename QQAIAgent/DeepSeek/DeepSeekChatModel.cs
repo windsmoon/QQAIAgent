@@ -107,9 +107,9 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             {
                 serializedMessage["tool_call_id"] = message.ToolCallId;
             }
-            else if (string.IsNullOrEmpty(message.Content))
+            else if (message.Role != ChatRole.User && string.IsNullOrEmpty(message.Content))
             {
-                throw new ArgumentException("纯文本消息内容不能为空。", nameof(request));
+                throw new ArgumentException("非 User 消息，纯文本消息内容不能为空。", nameof(request));
             }
 
             messages.Add(serializedMessage);

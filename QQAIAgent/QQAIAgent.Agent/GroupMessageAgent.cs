@@ -33,7 +33,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
 
         // 处理引用
-        await ParseReferenceAsync(messages, message, cancellationToken);
+        if (await ParseReferenceAsync(messages, message, cancellationToken) == false)
+        {
+            return null;
+        }
 
         messages.Add(new ChatMessage { Role = ChatRole.User, Content = text });
 
@@ -135,7 +138,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 _ => $"[未支持的消息段：{content.ContentType}]"
             }));
             // 每层都插到系统消息之后，让更早的引用排在前面；引用正文不处理触发前缀。
-            messageList.Add(new ChatMessage
+            messageList.Insert(referenceContextIndex, new ChatMessage
             {
                 Role = ChatRole.User,
                 Content = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n{refText}"
