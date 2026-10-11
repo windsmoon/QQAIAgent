@@ -39,7 +39,8 @@ ToolPluginLoader.RegisterTools(builder.Services, Path.Combine(AppContext.BaseDir
 builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(),
-    services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>()));
+    services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>(),
+    services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

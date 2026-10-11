@@ -6,14 +6,16 @@
 
 通过 NapCat 的正向 WebSocket 接收群消息，并核验登录的机器人账号。白名单群中以 `123` 开头的消息会进入处理队列，例如 `123 你好`。
 
-`GroupMessageAgent` 去掉触发前缀，将当前问题作为一条用户消息传给 `IChatModel`，调用一次模型后把返回文本发送到原群。只有前缀而没有问题时，直接回复“输入内容为空”；模型没有返回可用文本时，回复“回复内容为空”。
+`GroupMessageAgent` 去掉触发前缀，将当前问题作为一条用户消息传给 `IChatModel`。模型请求工具调用时，Agent 执行全部工具，将模型的完整工具调用消息和对应结果加入本次消息列表，再次请求模型，直到模型返回最终文本，发送到原群。调用工具时的中间文本不发送到 QQ。只有前缀而没有问题时，直接回复“输入内容为空”；模型结束调用而没有返回可用文本时，回复“回复内容为空”。
 
 模型请求超时时，回复“模型请求超时，请稍后再试”；其他模型请求失败时，回复“模型请求失败，请稍后再试”。异常仍由宿主记录日志，后续消息继续处理。宿主退出导致的取消不发送失败提示。
 
-- 所有群共用一个容量为 100 的消息队列，按顺序完成模型请求和 QQ 回复。
-- 模型实例作为单例复用，每条消息单独创建 `ChatRequest`，当前不保存历史上下文。
+调用日志记录每轮模型请求的开始、结束原因、工具调用数、回复字符数和耗时，以及每个工具的开始、完成、结果字符数和耗时。模型失败、工具失败或跳过、空回复和次数上限使用 Warning 日志，请求取消使用 Information 日志。日志作用域携带群号、发送者、模型轮次及工具名称、调用 ID，便于追踪完整请求。控制台时间戳和作用域显示由 `QQAIAgent.Host/appsettings.json` 中的 `Logging.Console.FormatterOptions` 配置。
+
+- 所有群共用一个容量为 100 的消息队列，按顺序完成每条消息的模型与工具调用和 QQ 回复。
+- 模型实例作为单例复用，每条 QQ 请求单独维护消息列表，包含当前问题和本次调用的模型、工具消息，请求结束后不保存历史上下文。
 - DeepSeek 在自己的项目中读取配置，并维护一个复用的 `HttpClient`。
-- DeepSeek 已支持工具调用请求和响应解析，Agent 已提供插件工具执行器；群消息入口尚未接入工具执行与 Agent 循环（agent loop），仍只调用一次模型。
+- DeepSeek 工具调用、插件工具执行器和 Agent 循环（agent loop）已接入群消息入口，支持一次 QQ 请求内多轮调用模型和工具后回复。
 
 ## 目录结构
 
@@ -44,7 +46,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | 模板 | 本地配置 | 内容 | 读取方 |
 | --- | --- | --- | --- |
 | `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号 | Host |
-| `agent.example.json` | `agent.local.json` | 群白名单 | Host |
+| `agent.example.json` | `agent.local.json` | 群白名单、每条请求的模型调用次数上限 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义及启用状态 | Host |
 
@@ -56,19 +58,20 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 
 ```json
 {
-  "AllowedGroups": [123456789]
+  "AllowedGroups": [123456789],
+  "MaxModelCalls": 10
 }
 ```
 
-`AllowedGroups` 填写允许处理的真实群号，空列表表示不处理任何群。
+`AllowedGroups` 填写允许处理的真实群号，空列表表示不处理任何群。`MaxModelCalls` 控制每条 QQ 请求最多调用模型的次数，省略时默认为 10，首次请求和生成最终回复的请求都计入。最后一次模型调用若仍请求工具，Agent 不再执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
 
 ## 本地运行
 
 1. 准备 .NET 10 SDK，并在 NapCat 中配置正向 WebSocket 服务。
 2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写四份本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
-3. 在 `agent.local.json` 中填写群白名单，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。
+3. 在 `agent.local.json` 中填写群白名单和模型调用次数上限，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。
 4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek 和内置工具插件；模型程序集复制到宿主输出目录，工具插件及其依赖复制到 `Plugins/QQAIAgent.Tools/`。
-5. 在白名单群中发送 `123 你好`，由模型生成文本后回复到该群。
+5. 在白名单群中发送 `123 你好` 测试文本回复，或发送 `123 请用 get_time 获取当前时间` 测试工具调用。模型请求获取时间时，Agent 执行 `GetTimeTool`，将结果交回模型生成最终回答，再回复该群。
 
 修改源目录中的 JSON 后，需要将更新后的配置复制到宿主程序目录的 `Config/`；重新构建 Host 会按项目配置执行复制。配置在启动或模型实例创建时读取，更新后需要重新启动宿主才能生效。
 
@@ -89,11 +92,11 @@ Host 启动时扫描 `AppContext.BaseDirectory/Plugins/` 的直接子目录。�
 3. 将插件完整构建输出放到宿主的 `Plugins/程序集名称/`，在 `tools.local.json` 中按每个工具的名称填写定义和开关，然后重新启动 Host。
 4. 如果插件源码也在当前解决方案中，并希望运行 Host 时自动构建它，在 Host 中添加与内置插件相同的项目引用元数据：`ReferenceOutputAssembly="false"`、`Private="false"` 和 `OutputItemType="ToolPluginAssembly"`。现有复制任务会自动处理该插件输出。
 
-`Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现、注册、模型工具调用响应解析和 Agent 的 `ToolExecutor` 已实现；群消息入口尚未接入工具执行和调用循环，当前仍只请求一次模型。
+`Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现、注册、模型工具调用响应解析和 Agent 的 `ToolExecutor` 已接入，群消息入口通过 Agent 循环完成工具执行与模型后续调用。
 
 Host 将 `ToolExecutor` 注册为单例，执行器通过构造函数获取全部插件 `IEnumerable<ITool>` 和启用的工具定义。`ExecuteAsync(IReadOnlyList<ChatToolCall>, CancellationToken)` 按返回顺序逐个匹配工具名称，将参数 JSON 字符串直接交给对应的 `ITool.ExecuteAsync`，每次调用的结果整理为 `ChatRole.Tool` 消息，保留原调用 ID 到 `ToolCallId`。执行器只允许配置中已启用的工具；未启用、未配置、未加载或执行失败的调用会返回错误结果消息，后续工具调用继续处理。请求取消会向上传递。每次执行的结果列表保留在方法内部，不共享请求状态。
 
-后续 Agent 循环可通过依赖注入获取执行器并调用：
+`GroupMessageAgent` 通过构造函数获取执行器，在每轮工具调用时执行：
 
 ```csharp
 var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, cancellationToken);
@@ -101,11 +104,11 @@ var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, c
 
 ## 模型调用与部署
 
-当前固定使用 `DeepSeekChatModel`。模型单例由依赖注入容器创建和管理，宿主退出时释放模型及其内部的 `HttpClient`。每次调用通过 `ChatRequest.Messages` 单独传入当前问题。
+当前固定使用 `DeepSeekChatModel`。模型单例由依赖注入容器创建和管理，宿主退出时释放模型及其内部的 `HttpClient`。每条 QQ 请求首次通过 `ChatRequest.Messages` 传入当前问题，后续模型调用携带本次请求中累积的模型与工具消息。
 
 `ChatRequest.Tools` 可以赋值。Agent 通过构造函数获取启用的工具定义，模型的 `SupportsToolCalling` 为 `true` 时才将其传入请求。DeepSeek 请求已支持工具定义、assistant 消息中的 `tool_calls` 和工具结果消息中的 `tool_call_id`，参数 Schema 会作为 JSON 对象发送；没有工具定义时省略 `tools` 字段。DeepSeek 的 `SupportsToolCalling` 已为 `true`，响应中的所有 `tool_calls` 会按顺序解析到 `ChatResponse.Message.ToolCalls`，保留调用 ID、工具名称和参数 JSON 字符串，工具调用消息的 `content` 可以为 `null`。参数字符串在响应解析时不会再次解析或改写，由工具执行阶段处理。
 
-当前 QQ 请求会携带启用的工具定义，但群消息入口尚未调用 `ToolExecutor` 或继续请求模型。如果模型仅返回工具调用而没有文本，群消息处理会回复“回复内容为空”；完整工具问答需要继续将执行器接入 Agent 调用循环。
+当前 QQ 请求会携带启用的工具定义。模型返回 `ChatFinishReason.ToolCalls` 时，群消息入口先保留完整的 assistant 消息，再调用 `ToolExecutor`，追加全部工具结果并继续请求模型；工具执行失败的结果也交给模型处理。模型结束工具调用后，仅发送最终文本到 QQ。循环受 `agent.local.json` 的 `MaxModelCalls` 限制，每一轮模型请求失败或超时都会发送对应失败提示。
 
 发布时部署 Host 的完整发布输出，包括引用的程序集、其他运行依赖和实际使用的配置。主要文件如下：
 
