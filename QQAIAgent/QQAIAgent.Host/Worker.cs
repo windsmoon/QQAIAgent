@@ -13,7 +13,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
     #region fields
     private readonly Channel<GroupMessage> _messages = Channel.CreateBounded<GroupMessage>(new BoundedChannelOptions(50)
     {
-        SingleReader = true,
+        SingleReader = false,
         SingleWriter = true,
         FullMode = BoundedChannelFullMode.Wait
     });
@@ -46,7 +46,9 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
                 }
             }
 
-            processingTask = ProcessMessagesAsync(processingCancellation.Token);
+            // 未配置允许的群时保留一个空闲消费者，避免处理任务立即完成而停止宿主。
+            processingTask = Task.WhenAll(Enumerable.Range(0, Math.Max(1, agentConfig.AllowedGroups.Count))
+                .Select(_ => ProcessMessagesAsync(processingCancellation.Token)));
             disconnectTask = napCatClient.WaitForDisconnectAsync(processingCancellation.Token);
             var completedTask = await Task.WhenAny(processingTask, disconnectTask);
             await completedTask;
