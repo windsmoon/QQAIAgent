@@ -1,4 +1,4 @@
-namespace QQAIAgent.Abstractions.Tools;
+namespace QQAIAgent.Abstractions.Tool;
 
 public interface ITool
 {

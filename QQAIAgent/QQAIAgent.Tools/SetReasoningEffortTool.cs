@@ -1,6 +1,6 @@
 using System.Text.Json;
 using QQAIAgent.Abstractions;
-using QQAIAgent.Abstractions.Tools;
+using QQAIAgent.Abstractions.Tool;
 
 namespace QQAIAgent.Tools;
 

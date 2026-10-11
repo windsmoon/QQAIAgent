@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using QQAIAgent.Abstractions.Tools;
+using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;

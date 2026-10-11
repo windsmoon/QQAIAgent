@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using QQAIAgent.Abstractions.Tools;
+using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Tools.Config;
 
 namespace QQAIAgent.Tools;

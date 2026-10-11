@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
-using QQAIAgent.Abstractions.Tools;
+using QQAIAgent.Abstractions.Tool;
 
 namespace QQAIAgent.Tools;
 

@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using QQAIAgent.Abstractions.Tools;
+using QQAIAgent.Abstractions.Tool;
 
 namespace QQAIAgent.Host.Plugin;
 
