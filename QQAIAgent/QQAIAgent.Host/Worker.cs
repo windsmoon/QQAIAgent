@@ -11,7 +11,7 @@ namespace QQAIAgent.Host;
 public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, AgentConfig agentConfig, NapCatConfig napCatConfig, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
 {
     #region fields
-    private readonly Channel<GroupMessage> _messages = Channel.CreateBounded<GroupMessage>(new BoundedChannelOptions(100)
+    private readonly Channel<GroupMessage> _messages = Channel.CreateBounded<GroupMessage>(new BoundedChannelOptions(50)
     {
         SingleReader = true,
         SingleWriter = true,
@@ -96,11 +96,10 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             return;
         }
 
-        // 只检查正文开头连续的文本段，不跨过图片、@ 等消息段匹配指令。
-        var text = string.Concat(message.MessageContentList
-            .TakeWhile(content => content is TextContent)
-            .Cast<TextContent>()
-            .Select(content => content.Text)).TrimStart();
+        // 按原消息顺序取第一个文本段匹配指令，跳过前面的非文本段。
+        var text = message.MessageContentList
+            .OfType<TextContent>()
+            .FirstOrDefault()?.Text.TrimStart() ?? "";
         if (text.StartsWith("123") == false)
         {
             return;
