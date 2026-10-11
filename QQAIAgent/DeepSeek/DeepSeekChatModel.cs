@@ -16,6 +16,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     private readonly string _apiKey;
     private readonly string _model;
     private readonly Uri _endpoint;
+    private readonly Uri _filesEndpoint;
     private readonly TimeSpan _timeout;
     #endregion
 
@@ -46,6 +47,8 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         _apiKey = config.ApiKey;
         _model = config.Model;
         _endpoint = endpoint;
+        // 与 chat/completions 使用相同的 API 路径前缀，包括可选的 v1 前缀。
+        _filesEndpoint = new Uri(endpoint, "../files");
         _timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
         _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     }
@@ -64,6 +67,8 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         }
 
         var messages = new List<object>(request.Messages.Count);
+        // 只在本次调用内按来源地址复用上传结果；后续工具轮次通过图片段中的 FileId 复用。
+        var uploadedFiles = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var message in request.Messages)
         {
             if (message is null)
@@ -80,16 +85,60 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 _ => throw new NotSupportedException($"当前 DeepSeek 实现不支持 {message.Role} 角色。")
             };
 
-            // 当前适配仍发送纯文本，未接入的内容段不能静默丢弃。
-            var text = string.Concat(message.ContentList.Select(content => content switch
+            object serializedContent;
+            if (message.ContentList.Any(content => content is ChatImageContent))
             {
-                ChatTextContent textContent => textContent.Text,
-                _ => throw new NotSupportedException("当前 DeepSeek 适配尚未接入非文本内容。")
-            }));
+                if (message.Role != ChatRole.User)
+                {
+                    throw new NotSupportedException("DeepSeek 图片输入仅支持 User 消息。");
+                }
+
+                var contentParts = new List<object>(message.ContentList.Count);
+                foreach (var content in message.ContentList)
+                {
+                    switch (content)
+                    {
+                        case ChatTextContent textContent:
+                            contentParts.Add(new { type = "text", text = textContent.Text });
+                            break;
+                        case ChatImageContent imageContent:
+                            if (string.IsNullOrEmpty(imageContent.FileId))
+                            {
+                                if (uploadedFiles.TryGetValue(imageContent.Url, out var fileId) == false)
+                                {
+                                    fileId = await UploadImageAsync(imageContent.Url, cancellationToken);
+                                }
+
+                                // 上传成功后写回原内容段，同一请求的后续模型调用不再下载或上传。
+                                imageContent.FileId = fileId;
+                            }
+
+                            if (string.IsNullOrEmpty(imageContent.Url) == false)
+                            {
+                                uploadedFiles[imageContent.Url] = imageContent.FileId;
+                            }
+                            contentParts.Add(new { type = "file", file_id = imageContent.FileId });
+                            break;
+                        default:
+                            throw new NotSupportedException("当前 DeepSeek 适配仅支持文本和图片内容。");
+                    }
+                }
+
+                serializedContent = contentParts;
+            }
+            else
+            {
+                serializedContent = string.Concat(message.ContentList.Select(content => content switch
+                {
+                    ChatTextContent textContent => textContent.Text,
+                    _ => throw new NotSupportedException("当前 DeepSeek 适配仅支持文本和图片内容。")
+                }));
+            }
+
             var serializedMessage = new Dictionary<string, object>
             {
                 ["role"] = role,
-                ["content"] = text
+                ["content"] = serializedContent
             };
             if (message.Role == ChatRole.Assistant && request.Tools.Count > 0)
             {
@@ -114,7 +163,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             {
                 serializedMessage["tool_call_id"] = message.ToolCallId;
             }
-            else if (message.Role != ChatRole.User && string.IsNullOrEmpty(text))
+            else if (message.Role != ChatRole.User && serializedContent is string text && string.IsNullOrEmpty(text))
             {
                 throw new ArgumentException("非 User 消息，纯文本消息内容不能为空。", nameof(request));
             }
@@ -178,6 +227,44 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         await using var responseStream = await httpResponse.Content.ReadAsStreamAsync(timeout.Token);
         using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
         return ParseResponse(document.RootElement);
+    }
+
+    /// <summary>流式读取并上传图片，文件自创建起保留 30 天，下载和上传共用单次超时。</summary>
+    private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_timeout);
+        // API 密钥只加在上传请求上，读取图片来源时不携带。
+        using var imageResponse = await _httpClient.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        imageResponse.EnsureSuccessStatusCode();
+        await using var imageStream = await imageResponse.Content.ReadAsStreamAsync(timeout.Token);
+        using var uploadContent = new MultipartFormDataContent();
+        // 直接转发响应流，不落盘、不生成完整字节数组或 Base64 字符串。
+        uploadContent.Add(new StreamContent(imageStream), "file", "image");
+        uploadContent.Add(new StringContent("user_data"), "purpose");
+        uploadContent.Add(new StringContent("created_at"), "expires_after[anchor]");
+        uploadContent.Add(new StringContent("2592000"), "expires_after[seconds]");
+
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, _filesEndpoint)
+        {
+            Content = uploadContent
+        };
+        uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        using var uploadResponse = await _httpClient.SendAsync(uploadRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        uploadResponse.EnsureSuccessStatusCode();
+        await using var responseStream = await uploadResponse.Content.ReadAsStreamAsync(timeout.Token);
+        using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
+        var fileId = document.RootElement.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
+            ? id.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(fileId))
+        {
+            throw new InvalidDataException("DeepSeek 文件上传响应缺少有效的文件 ID。");
+        }
+
+        return fileId;
     }
 
     public void Dispose()
