@@ -116,7 +116,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         if (_messages.Writer.TryWrite(message) == false)
         {
             logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
-            napCatClient.SendGroupMessageAsync(message.GroupId, "群消息队列已满，请稍后再试", new CancellationToken());
+            napCatClient.SendGroupMessageAsync(message.GroupId, message.SenderId, "群消息队列已满，请稍后再试", new CancellationToken());
         }
     }
 

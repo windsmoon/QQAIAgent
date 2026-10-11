@@ -53,13 +53,17 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
         }
     }
 
-    public async Task<long> SendGroupMessageAsync(long groupId, string text, CancellationToken cancellationToken)
+    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, CancellationToken cancellationToken)
     {
+        // 艾特和正文分别使用消息段，正文仍按纯文本发送。
         var data = await CallApiAsync("send_group_msg", new
         {
             group_id = groupId,
-            message = text,
-            auto_escape = true
+            message = new object[]
+            {
+                new { type = "at", data = new { qq = userId.ToString(CultureInfo.InvariantCulture) } },
+                new { type = "text", data = new { text = $" {text}" } }
+            }
         }, cancellationToken);
         return data.GetProperty("message_id").GetInt64();
     }
