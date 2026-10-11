@@ -8,7 +8,7 @@ using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.NapCat;
 
-public class NapCatClient(NapCatConfig config) : IMessageSender, IDisposable
+public class NapCatClient(NapCatConfig config) : IMessageSender, IMessageReader, IDisposable
 {
     #region fields
     private readonly ClientWebSocket _socket = new();
@@ -61,6 +61,17 @@ public class NapCatClient(NapCatConfig config) : IMessageSender, IDisposable
             auto_escape = true
         }, cancellationToken);
         return data.GetProperty("message_id").GetInt64();
+    }
+
+    public async Task<GroupMessage> GetGroupMessageAsync(long messageId, CancellationToken cancellationToken)
+    {
+        var data = await CallApiAsync("get_msg", new { message_id = messageId }, cancellationToken);
+        if (data.GetProperty("message_type").GetString() != "group")
+        {
+            throw new InvalidDataException("引用消息必须是群消息。");
+        }
+
+        return ParseGroupMessage(data);
     }
 
     public async Task WaitForDisconnectAsync(CancellationToken cancellationToken)
@@ -233,7 +244,7 @@ public class NapCatClient(NapCatConfig config) : IMessageSender, IDisposable
                     continue;
                 }
 
-                var groupMessage = ParseGroupMessage(root);
+                var groupMessage = ParseGroupMessageEvent(root);
                 if (groupMessage is not null)
                 {
                     GroupMessageReceived?.Invoke(groupMessage);
@@ -254,7 +265,7 @@ public class NapCatClient(NapCatConfig config) : IMessageSender, IDisposable
         }
     }
 
-    private static GroupMessage? ParseGroupMessage(JsonElement root)
+    private static GroupMessage? ParseGroupMessageEvent(JsonElement root)
     {
         if (root.TryGetProperty("post_type", out var postType) == false
             || postType.GetString() != "message"
@@ -263,10 +274,16 @@ public class NapCatClient(NapCatConfig config) : IMessageSender, IDisposable
             return null;
         }
 
+        return ParseGroupMessage(root);
+    }
+
+    // 群消息事件与 get_msg 响应共用内容解析；API 响应不依赖事件的 post_type。
+    private static GroupMessage ParseGroupMessage(JsonElement root)
+    {
         var groupMessage = new GroupMessage
         {
-            GroupId = root.GetProperty("group_id").GetInt64(),
-            SenderId = root.GetProperty("user_id").GetInt64()
+            GroupId = ReadMessageInteger(root.GetProperty("group_id")),
+            SenderId = ReadMessageInteger(root.GetProperty("user_id"))
         };
         var message = root.GetProperty("message");
         // napcat 配置决定是发来原始文本消息还是已经解析好的数组

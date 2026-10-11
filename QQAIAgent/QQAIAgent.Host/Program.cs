@@ -34,11 +34,12 @@ builder.Services.AddSingleton(agentConfig);
 builder.Services.AddSingleton<IReadOnlyList<ChatToolDefinition>>(enabledTools);
 builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
+builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
 ToolPluginLoader.RegisterTools(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
 builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
-    agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(),
+    agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(), services.GetRequiredService<IMessageReader>(),
     services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>(),
     services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
 builder.Services.AddHostedService<Worker>();

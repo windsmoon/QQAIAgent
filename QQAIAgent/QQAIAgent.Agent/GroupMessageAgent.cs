@@ -8,7 +8,7 @@ using QQAIAgent.Messaging.Content;
 
 namespace QQAIAgent.Agent;
 
-public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, ILogger<GroupMessageAgent> logger)
+public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, ILogger<GroupMessageAgent> logger)
 {
     #region fields
     #endregion
@@ -31,6 +31,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         {
             messages.Add(new ChatMessage { Role = ChatRole.System, Content = config.SystemPrompt });
         }
+
+        // 处理引用
+        await ParseReferenceAsync(messages, message, cancellationToken);
+
         messages.Add(new ChatMessage { Role = ChatRole.User, Content = text });
 
         // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
@@ -99,6 +103,47 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         logger.LogWarning("已达到模型调用次数上限：上限={MaxModelCalls}", config.MaxModelCalls);
         return await messageSender.SendGroupMessageAsync(message.GroupId, "已达到模型调用次数上限，请重新发起请求", cancellationToken);
+    }
+
+    private async Task<bool> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, CancellationToken cancellationToken)
+    {
+        var referenceContextIndex = messageList.Count;
+        var refMessageId = groupMessage.RefMessageId;
+        for (int referenceDepth = 0; referenceDepth < config.MaxReferenceDepth && refMessageId is long currentRefMessageId; referenceDepth++)
+        {
+            GroupMessage refMessage;
+            try
+            {
+                // 在处理阶段读取引用，接收循环必须保持运行才能返回 get_msg 的响应。
+                refMessage = await messageReader.GetGroupMessageAsync(currentRefMessageId, cancellationToken);
+            }
+            catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
+            {
+                await messageSender.SendGroupMessageAsync(groupMessage.GroupId, "获取引用消息失败，请稍后再试", cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return false;
+                // logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);
+            }
+
+            // 非文本段先保留类型标记，避免把图片两侧的文字当成连续文本。
+            var refText = string.Concat(refMessage.MessageContentList.Select(content => content switch
+            {
+                TextContent textContent => textContent.Text,
+                AtContent atContent => atContent.Target == "all" ? "@全体成员" : $"@{atContent.Target}",
+                ImageContent => "[图片，图像内容暂未接入模型]",
+                UnknownContent unknownContent => $"[未支持的消息段：{unknownContent.OriginalType}]",
+                _ => $"[未支持的消息段：{content.ContentType}]"
+            }));
+            // 每层都插到系统消息之后，让更早的引用排在前面；引用正文不处理触发前缀。
+            messageList.Add(new ChatMessage
+            {
+                Role = ChatRole.User,
+                Content = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n{refText}"
+            });
+            refMessageId = refMessage.RefMessageId;
+        }
+
+        return true;
     }
     #endregion
 }
