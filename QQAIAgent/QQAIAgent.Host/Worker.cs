@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;
+using QQAIAgent.Messaging.Content;
 using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
 
@@ -95,12 +96,17 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             return;
         }
 
-        string text = message.Text.TrimStart();
+        // 只检查正文开头连续的文本段，不跨过图片、@ 等消息段匹配指令。
+        var text = string.Concat(message.MessageContentList
+            .TakeWhile(content => content is TextContent)
+            .Cast<TextContent>()
+            .Select(content => content.Text)).TrimStart();
         if (text.StartsWith("123") == false)
         {
             return;
         }
-        logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，文本={Text}", message.GroupId, message.SenderId, message.Text);
+        logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，消息段数={ContentCount}，开头文本={Text}",
+            message.GroupId, message.SenderId, message.MessageContentList.Count, text);
 
         // 接收回调中不能等待消息处理完成，同一个接收循环还需要继续读取 API 响应。
         if (_messages.Writer.TryWrite(message) == false)

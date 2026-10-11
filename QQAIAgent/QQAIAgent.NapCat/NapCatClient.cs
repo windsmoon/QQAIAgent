@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using QQAIAgent.Messaging;
@@ -285,18 +284,6 @@ public class NapCatClient(NapCatConfig config) : IMessageSender, IDisposable
         else
         {
             throw new InvalidDataException("NapCat 群消息内容必须是字符串或消息段数组。");
-        }
-
-        // Text 仅兼容原来的纯文本流程，避免旧指令匹配跨非文本消息段拼接正文。
-        if (groupMessage.RefMessageId is null && groupMessage.MessageContentList.All(content => content is TextContent))
-        {
-            var builder = new StringBuilder();
-            foreach (var content in groupMessage.MessageContentList)
-            {
-                builder.Append(((TextContent)content).Text);
-            }
-
-            groupMessage.Text = builder.ToString();
         }
 
         return groupMessage;

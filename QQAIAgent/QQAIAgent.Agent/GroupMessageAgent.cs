@@ -4,6 +4,7 @@ using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;
+using QQAIAgent.Messaging.Content;
 
 namespace QQAIAgent.Agent;
 
@@ -19,7 +20,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         using var requestScope = logger.BeginScope("群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
 
         // 消息接收端已筛选出需要处理的消息，并匹配了 "123" 前缀。
-        var text = message.Text.TrimStart()[3..].Trim();
+        // 当前模型接口接收纯文本，按消息顺序提取文本段；其他消息段保留在原消息中。
+        var text = string.Concat(message.MessageContentList
+            .OfType<TextContent>()
+            .Select(content => content.Text)).TrimStart()[3..].Trim();
         // 消息列表只属于本次请求，不与其他用户或后续请求共享上下文。
         var messages = new List<ChatMessage>();
         // 系统提示词放在最前面，并随工具调用消息保留到本次请求结束。
