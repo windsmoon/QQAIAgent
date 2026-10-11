@@ -52,7 +52,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
     private async Task<(long? MessageId, string Status, string ErrorType)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
     {
-        // 消息接收端已筛选出需要处理的消息，并移除了 "123" 前缀。
+        // 消息接收端已筛选出需要处理的消息，并移除了触发标记。
         // 按原顺序转换文本和图片，不跨图片拼接或裁剪文本段。
         var chatContentList = new List<ChatContent>();
         AppendChatContents(chatContentList, message.MessageContentList, isReference: false);
