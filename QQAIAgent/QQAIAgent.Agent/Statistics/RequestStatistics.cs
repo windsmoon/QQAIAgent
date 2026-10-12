@@ -136,6 +136,18 @@ public sealed class RequestStatistics(IDatabase database)
             """, new { RequestId = requestId, MessageId = messageId }, cancellationToken);
     }
 
+    /// <summary>读取本次请求各轮已返回的 Token 用量汇总，未知用量保留 null。</summary>
+    public async Task<(long? PromptTokens, long? CompletionTokens, long? PromptCacheHitTokens)> GetRequestTokenUsageAsync(string requestId, CancellationToken cancellationToken)
+    {
+        // Dapper 按列顺序映射元组，查询列顺序需与返回值一致。
+        var results = await database.QueryAsync<(long? PromptTokens, long? CompletionTokens, long? PromptCacheHitTokens)>("""
+            SELECT prompt_tokens, completion_tokens, prompt_cache_hit_tokens
+            FROM request_statistics
+            WHERE request_id = @RequestId;
+            """, new { RequestId = requestId }, cancellationToken);
+        return results[0];
+    }
+
     public async Task<string> StartModelCallAsync(string requestId, int round, ReasoningEffort reasoningEffort, CancellationToken cancellationToken)
     {
         var callId = Guid.NewGuid().ToString("N");

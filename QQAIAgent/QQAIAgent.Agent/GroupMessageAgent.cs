@@ -182,6 +182,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         // 引用提问消息回复；提问不带艾特或无法引用时仍艾特发送者。
         var messageId = await messageSender.SendGroupMessageAsync(message.GroupId, message.SenderId, text, message.MessageId, message.NeedAtInReply, cancellationToken);
         await statistics.RecordReplyAsync(requestId, messageId, CancellationToken.None);
+        var usage = await statistics.GetRequestTokenUsageAsync(requestId, CancellationToken.None);
+        // 缓存只命中输入 Token，命中率不使用包含输出 Token 的总用量作为分母。
+        var cacheHitRate = usage.PromptTokens is > 0 && usage.PromptCacheHitTokens.HasValue
+            ? $"{usage.PromptCacheHitTokens.Value * 100d / usage.PromptTokens.Value:F2}%"
+            : "未知";
+        logger.LogInformation("本次请求 Token 用量：总输入 Token={PromptTokens}，总输出 Token={CompletionTokens}，缓存命中率={CacheHitRate}",
+            usage.PromptTokens?.ToString() ?? "未知", usage.CompletionTokens?.ToString() ?? "未知", cacheHitRate);
         return messageId;
     }
 
