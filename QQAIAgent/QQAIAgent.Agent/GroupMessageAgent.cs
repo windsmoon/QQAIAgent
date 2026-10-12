@@ -110,7 +110,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 var failureText = exception is OperationCanceledException
                     ? "模型请求超时，请稍后再试"
                     : "模型请求失败，请稍后再试";
-                await SendReplyAsync(requestId, message.GroupId, message.SenderId, failureText, cancellationToken);
+                await SendReplyAsync(requestId, message, failureText, cancellationToken);
                 // 提示发送后继续抛出原异常，由宿主记录日志并处理下一条消息。
                 throw;
             }
@@ -130,10 +130,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 if (string.IsNullOrWhiteSpace(responseText))
                 {
                     logger.LogWarning("模型回复内容为空，将发送空回复提示。");
-                    return (await SendReplyAsync(requestId, message.GroupId, message.SenderId, "回复内容为空", cancellationToken), "empty_response", "");
+                    return (await SendReplyAsync(requestId, message, "回复内容为空", cancellationToken), "empty_response", "");
                 }
 
-                return (await SendReplyAsync(requestId, message.GroupId, message.SenderId, responseText, cancellationToken), "completed", "");
+                return (await SendReplyAsync(requestId, message, responseText, cancellationToken), "completed", "");
             }
 
             // 已无下一次模型调用机会时停止，避免执行无法继续交给模型的工具调用。
@@ -149,12 +149,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
 
         logger.LogWarning("已达到模型调用次数上限：上限={MaxModelCalls}", config.MaxModelCalls);
-        return (await SendReplyAsync(requestId, message.GroupId, message.SenderId, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit", "");
+        return (await SendReplyAsync(requestId, message, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit", "");
     }
 
-    private async Task<long> SendReplyAsync(string requestId, long groupId, long userId, string text, CancellationToken cancellationToken)
+    private async Task<long> SendReplyAsync(string requestId, GroupMessage message, string text, CancellationToken cancellationToken)
     {
-        var messageId = await messageSender.SendGroupMessageAsync(groupId, userId, text, cancellationToken);
+        // 引用提问消息回复；提问不带艾特或无法引用时仍艾特发送者。
+        var messageId = await messageSender.SendGroupMessageAsync(message.GroupId, message.SenderId, text, message.MessageId, message.NeedAtInReply, cancellationToken);
         await statistics.RecordReplyAsync(requestId, messageId, CancellationToken.None);
         return messageId;
     }
@@ -207,7 +208,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             }
             catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
             {
-                await SendReplyAsync(requestId, groupMessage.GroupId, groupMessage.SenderId, "获取引用消息失败，请稍后再试", cancellationToken);
+                await SendReplyAsync(requestId, groupMessage, "获取引用消息失败，请稍后再试", cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 return (false, exception.GetType().Name);
                 // logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);

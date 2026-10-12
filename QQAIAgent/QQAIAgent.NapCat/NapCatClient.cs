@@ -53,17 +53,26 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
         }
     }
 
-    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, CancellationToken cancellationToken)
+    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, long? quoteMessageId, bool atUser, CancellationToken cancellationToken)
     {
-        // 艾特和正文分别使用消息段，正文仍按纯文本发送。
+        // 优先引用提问消息：引用内容自带提问时的艾特，仅在提问不带艾特或无法引用时才显式艾特。
+        var segments = new List<object>();
+        if (quoteMessageId is long quotedMessageId)
+        {
+            segments.Add(new { type = "reply", data = new { id = quotedMessageId } });
+        }
+
+        if (atUser)
+        {
+            segments.Add(new { type = "at", data = new { qq = userId.ToString(CultureInfo.InvariantCulture) } });
+        }
+
+        segments.Add(new { type = "text", data = new { text = $" {text}" } });
+
         var data = await CallApiAsync("send_group_msg", new
         {
             group_id = groupId,
-            message = new object[]
-            {
-                new { type = "at", data = new { qq = userId.ToString(CultureInfo.InvariantCulture) } },
-                new { type = "text", data = new { text = $" {text}" } }
-            }
+            message = segments
         }, cancellationToken);
         return data.GetProperty("message_id").GetInt64();
     }
@@ -309,6 +318,10 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
     {
         var groupMessage = new GroupMessage
         {
+            // 事件与 get_msg 响应都带消息 ID，用于回复时引用提问消息。
+            MessageId = root.TryGetProperty("message_id", out var messageId) && messageId.ValueKind != JsonValueKind.Null
+                ? ReadMessageInteger(messageId)
+                : null,
             GroupId = ReadMessageInteger(root.GetProperty("group_id")),
             SenderId = ReadMessageInteger(root.GetProperty("user_id"))
         };
