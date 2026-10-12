@@ -7,6 +7,7 @@ using QQAIAgent.Agent.Statistics;
 using QQAIAgent.Agent;
 using QQAIAgent.DeepSeek;
 using QQAIAgent.Host;
+using QQAIAgent.Host.Logging;
 using QQAIAgent.Host.Plugin;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Messaging;
@@ -14,6 +15,9 @@ using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+var logFilePath = Path.GetFullPath(builder.Configuration["Logging:File:Path"] ?? "Log/qqaiaagent.log", AppContext.BaseDirectory);
+builder.Services.AddSingleton<ILoggerProvider>(_ => new FileLoggerProvider(logFilePath));
 
 var databasePath = Path.GetFullPath(builder.Configuration["Database:Path"] ?? "Data/qqaiaagent.sqlite3", AppContext.BaseDirectory);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory);
