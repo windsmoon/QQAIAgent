@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Channels;
 using QQAIAgent.Agent;
@@ -12,7 +13,7 @@ namespace QQAIAgent.Host;
 public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, AgentConfig agentConfig, NapCatConfig napCatConfig, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
 {
     #region fields
-    private readonly Channel<GroupMessage> _messages = Channel.CreateBounded<GroupMessage>(new BoundedChannelOptions(50)
+    private readonly Channel<(GroupMessage Message, long ReceivedTimestamp)> _messages = Channel.CreateBounded<(GroupMessage Message, long ReceivedAt)>(new BoundedChannelOptions(50)
     {
         SingleReader = false,
         SingleWriter = true,
@@ -89,6 +90,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
 
     private void OnGroupMessageReceived(GroupMessage message)
     {
+        var receivedAt = Stopwatch.GetTimestamp();
         if (message.SenderId == napCatConfig.BotAccount)
         {
             return;
@@ -124,7 +126,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             message.GroupId, message.SenderId, message.MessageContentList.Count, text);
 
         // 接收回调中不能等待消息处理完成，同一个接收循环还需要继续读取 API 响应。
-        if (_messages.Writer.TryWrite(message) == false)
+        if (_messages.Writer.TryWrite((message, receivedAt)) == false)
         {
             logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
             napCatClient.SendGroupMessageAsync(message.GroupId, message.SenderId, "群消息队列已满，请稍后再试", message.MessageId, message.NeedAtInReply, new CancellationToken());
@@ -133,13 +135,14 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
 
     private async Task ProcessMessagesAsync(CancellationToken cancellationToken)
     {
-        await foreach (var message in _messages.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var request in _messages.Reader.ReadAllAsync(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var message = request.Message;
             try
             {
                 logger.LogInformation("正在处理群消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
-                var messageId = await messageAgent.HandleMessageAsync(message, cancellationToken);
+                var messageId = await messageAgent.HandleMessageAsync(message, request.ReceivedTimestamp, cancellationToken);
                 if (messageId is null)
                 {
                     logger.LogInformation("群消息无需回复：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);

@@ -12,6 +12,8 @@
 
 模型请求超时时，回复“模型请求超时，请稍后再试”；其他模型请求失败时，回复“模型请求失败，请稍后再试”。异常仍由宿主记录日志，后续消息继续处理。宿主退出导致的取消不发送失败提示。
 
+每条 QQ 用户请求受 `QQRequestTimeoutSeconds` 总时限控制，默认 300 秒（5 分钟）。从收到请求到正常回复共用一个时限，总时限到达后取消当前处理，回复“请求处理超时，请稍后再试”，请求统计状态记为 `timeout`，后续消息继续处理。
+
 调用日志记录每轮模型请求的开始、结束原因、工具调用数、回复字符数和耗时，以及每个工具的开始、完成、结果字符数和耗时。模型失败、工具失败、超时或跳过、空回复和次数上限使用 Warning 日志，请求取消使用 Information 日志。日志作用域携带群号、发送者、模型轮次及工具名称、调用 ID，便于追踪完整请求。控制台时间戳和作用域显示由 `QQAIAgent.Host/appsettings.json` 中的 `Logging.Console.FormatterOptions` 配置。
 
 进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。数据库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
@@ -52,7 +54,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 | 模板 | 本地配置 | 内容 | 读取方 |
 | --- | --- | --- | --- |
 | `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号 | Host |
-| `agent.example.json` | `agent.local.json` | 群白名单、测试模式、每条请求的模型调用次数上限、系统提示词 | Host |
+| `agent.example.json` | `agent.local.json` | 群白名单、测试模式、每条请求的模型调用次数上限、总超时秒数、系统提示词 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
 | `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 联网搜索工具 |
@@ -72,6 +74,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
   "AllowedGroups": [123456789],
   "IsTestMode": false,
   "MaxModelCalls": 10,
+  "QQRequestTimeoutSeconds": 300,
   "MaxReferenceDepth": 3,
   "SystemPrompt": "你是 QQ 群聊中的聊天助手。用简短的简体中文纯文本直接回答，不使用 Markdown，默认用 1～3 句话，尽量控制在 150 字以内。"
 }
@@ -81,13 +84,15 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 
 `MaxReferenceDepth` 控制最多读取的引用层数，省略时默认为 3。直接引用计为第 1 层，不包含当前消息；设为 0 时不读取引用。达到上限或引用链结束后，使用已读取的引用上下文处理当前请求。
 
+`QQRequestTimeoutSeconds` 控制单条 QQ 用户请求从接收到正常回复的总超时秒数，填写正数，省略时默认为 300。计时从 Host 收到请求起，覆盖排队、引用读取、所有模型轮次、工具调用和正常回复；进入下一轮不会重新计时。排队耗尽时限的请求在出队后直接回复超时提示，不再读取引用或调用模型、工具。DeepSeek 的 `TimeoutSeconds` 和各工具的 `TimeoutSeconds` 仍控制各自单次调用，与总时限共同生效，先到达的时限触发取消。超时提示发送和结束统计在处理取消后完成。修改配置后需将配置复制到宿主目录并重启。
+
 `SystemPrompt` 用于指导群聊回复格式和风格，省略或留空时不发送系统消息。模板中的默认提示词要求简体中文纯文本、自然直接、不使用 Markdown，通常用 1～3 句话并尽量控制在 150 字以内；搜索和网页内容只提炼关键信息，来源链接直接使用 URL。用户明确要求详细说明时可适当展开。格式和篇幅由提示词引导模型生成，程序不会按字数截断或删除 Markdown。该配置由 Host 在启动时读取，修改后需同步到宿主目录并重新启动。
 
 ## 本地运行
 
 1. 准备 .NET 10 SDK，并在 NapCat 中配置正向 WebSocket 服务。
 2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
-3. 在 `agent.local.json` 中填写群白名单和模型调用次数上限，在 `tools.local.json` 中为每个工具填写 `TimeoutSeconds`，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。使用联网搜索时，在 `websearch.local.json` 中填写腾讯云联网搜索服务 API Key 和完整请求地址；不使用时将 `web_search` 的 `Enabled` 设为 `false`。
+3. 在 `agent.local.json` 中填写群白名单、模型调用次数上限和总超时秒数 `QQRequestTimeoutSeconds`（默认 300 秒），在 `tools.local.json` 中为每个工具填写 `TimeoutSeconds`，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。使用联网搜索时，在 `websearch.local.json` 中填写腾讯云联网搜索服务 API Key 和完整请求地址；不使用时将 `web_search` 的 `Enabled` 设为 `false`。
 4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek 和内置工具插件；模型程序集复制到宿主输出目录，工具插件及其依赖复制到 `Plugins/QQAIAgent.Tools/`。
 5. 在白名单群中发送 `123 你好` 测试文本回复，或发送 `123 请用 get_time 获取当前时间` 测试工具调用。模型请求获取时间时，Agent 执行 `GetTimeTool`，将结果交回模型生成最终回答，再回复该群。
 

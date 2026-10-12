@@ -17,16 +17,29 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     
     #region methods
     /// <summary>处理群消息，通过模型与工具的多轮调用生成最终回复，返回回复消息 ID。</summary>
-    public async Task<long?> HandleMessageAsync(GroupMessage message, CancellationToken cancellationToken)
+    /// <param name="receivedTimeStamp">通过 Stopwatch.GetTimestamp 记录的请求接收时间，用于累计排队与处理时长。</param>
+    public async Task<long?> HandleMessageAsync(GroupMessage message, long receivedTimeStamp, CancellationToken cancellationToken)
     {
         var requestId = await statistics.StartRequestAsync(botAccount, message.GroupId, message.SenderId, cancellationToken);
         using var requestScope = logger.BeginScope("请求={RequestId}，群={GroupId}，发送者={SenderId}", requestId, message.GroupId, message.SenderId);
-        var startedAt = Stopwatch.GetTimestamp();
+        var startedAt = receivedTimeStamp;
         var status = "failed";
         var errorType = "";
+        // 从接收时刻累计总时长，排队会消耗时限，各轮模型和工具调用不会重置计时。
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var remainingTime = TimeSpan.FromSeconds(config.QQRequestTimeoutSeconds) - Stopwatch.GetElapsedTime(startedAt);
+        if (remainingTime <= TimeSpan.Zero)
+        {
+            timeout.Cancel();
+        }
+        else
+        {
+            timeout.CancelAfter(remainingTime);
+        }
         try
         {
-            var result = await HandleRequestAsync(message, requestId, cancellationToken);
+            timeout.Token.ThrowIfCancellationRequested();
+            var result = await HandleRequestAsync(message, requestId, timeout.Token);
             status = result.Status;
             errorType = result.ErrorType;
             return result.MessageId;
@@ -36,6 +49,15 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             status = "cancelled";
             errorType = exception.GetType().Name;
             throw;
+        }
+        catch (OperationCanceledException exception) when (timeout.IsCancellationRequested && cancellationToken.IsCancellationRequested == false)
+        {
+            status = "timeout";
+            errorType = exception.GetType().Name;
+            logger.LogWarning("用户请求处理超时：上限={TimeoutSeconds} s，耗时={ElapsedMilliseconds:F0} ms",
+                config.QQRequestTimeoutSeconds, Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+            // 总时限已取消，超时提示使用宿主令牌；宿主退出时仍会取消发送。
+            return await SendReplyAsync(requestId, message, "请求处理超时，请稍后再试", cancellationToken);
         }
         catch (Exception exception)
         {
