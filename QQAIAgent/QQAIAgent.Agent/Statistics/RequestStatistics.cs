@@ -40,6 +40,12 @@ public sealed class RequestStatistics(IDatabase database)
                 status TEXT NOT NULL,
                 finish_reason TEXT NOT NULL DEFAULT '',
                 error_type TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                total_tokens INTEGER,
+                prompt_cache_hit_tokens INTEGER,
+                prompt_cache_miss_tokens INTEGER,
+                reasoning_tokens INTEGER,
                 UNIQUE(request_id, round)
             );
 
@@ -60,10 +66,17 @@ public sealed class RequestStatistics(IDatabase database)
 
             CREATE INDEX IF NOT EXISTS ix_tool_calls_request ON tool_calls (request_id);
 
+            -- 按请求汇总各轮已返回的用量；没有已知用量时保留 NULL。
             CREATE VIEW IF NOT EXISTS request_statistics AS
             SELECT r.*,
                 (SELECT COUNT(*) FROM model_calls m WHERE m.request_id = r.request_id) AS model_call_count,
-                (SELECT COUNT(*) FROM tool_calls t WHERE t.request_id = r.request_id) AS tool_call_count
+                (SELECT COUNT(*) FROM tool_calls t WHERE t.request_id = r.request_id) AS tool_call_count,
+                (SELECT SUM(m.prompt_tokens) FROM model_calls m WHERE m.request_id = r.request_id) AS prompt_tokens,
+                (SELECT SUM(m.completion_tokens) FROM model_calls m WHERE m.request_id = r.request_id) AS completion_tokens,
+                (SELECT SUM(m.total_tokens) FROM model_calls m WHERE m.request_id = r.request_id) AS total_tokens,
+                (SELECT SUM(m.prompt_cache_hit_tokens) FROM model_calls m WHERE m.request_id = r.request_id) AS prompt_cache_hit_tokens,
+                (SELECT SUM(m.prompt_cache_miss_tokens) FROM model_calls m WHERE m.request_id = r.request_id) AS prompt_cache_miss_tokens,
+                (SELECT SUM(m.reasoning_tokens) FROM model_calls m WHERE m.request_id = r.request_id) AS reasoning_tokens
             FROM requests r;
 
             CREATE VIEW IF NOT EXISTS tool_usage AS
@@ -140,11 +153,16 @@ public sealed class RequestStatistics(IDatabase database)
         return callId;
     }
 
-    public Task FinishModelCallAsync(string callId, string status, string finishReason, long durationMs, string errorType, CancellationToken cancellationToken)
+    public Task FinishModelCallAsync(string callId, string status, string finishReason, long durationMs, string errorType, CancellationToken cancellationToken,
+        long? promptTokens = null, long? completionTokens = null, long? totalTokens = null,
+        long? promptCacheHitTokens = null, long? promptCacheMissTokens = null, long? reasoningTokens = null)
     {
         return database.ExecuteAsync("""
             UPDATE model_calls SET finished_at = @FinishedAt, duration_ms = @DurationMs,
-                status = @Status, finish_reason = @FinishReason, error_type = @ErrorType
+                status = @Status, finish_reason = @FinishReason, error_type = @ErrorType,
+                prompt_tokens = @PromptTokens, completion_tokens = @CompletionTokens, total_tokens = @TotalTokens,
+                prompt_cache_hit_tokens = @PromptCacheHitTokens, prompt_cache_miss_tokens = @PromptCacheMissTokens,
+                reasoning_tokens = @ReasoningTokens
             WHERE call_id = @CallId;
             """, new
         {
@@ -153,7 +171,13 @@ public sealed class RequestStatistics(IDatabase database)
             DurationMs = durationMs,
             Status = status,
             FinishReason = finishReason,
-            ErrorType = errorType
+            ErrorType = errorType,
+            PromptTokens = promptTokens,
+            CompletionTokens = completionTokens,
+            TotalTokens = totalTokens,
+            PromptCacheHitTokens = promptCacheHitTokens,
+            PromptCacheMissTokens = promptCacheMissTokens,
+            ReasoningTokens = reasoningTokens
         }, cancellationToken);
     }
 
