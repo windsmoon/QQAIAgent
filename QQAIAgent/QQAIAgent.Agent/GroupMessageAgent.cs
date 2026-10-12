@@ -138,7 +138,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             }
 
             await statistics.FinishModelCallAsync(modelCallId, "completed", response.FinishReason.ToString(),
-                (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, "", CancellationToken.None);
+                (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, "", CancellationToken.None,
+                promptTokens: response.PromptTokens, completionTokens: response.CompletionTokens,
+                totalTokens: response.TotalTokens, promptCacheHitTokens: response.PromptCacheHitTokens,
+                promptCacheMissTokens: response.PromptCacheMissTokens, reasoningTokens: response.ReasoningTokens);
 
             var responseText = string.Concat(response.Message.ContentList
                 .OfType<ChatTextContent>()

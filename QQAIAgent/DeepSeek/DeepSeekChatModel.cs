@@ -356,7 +356,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             throw new InvalidDataException("DeepSeek 响应没有可用的文本内容。");
         }
 
-        return new ChatResponse
+        var response = new ChatResponse
         {
             Message = new ChatMessage
             {
@@ -367,6 +367,29 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             },
             FinishReason = finishReason
         };
+
+        if (root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
+        {
+            response.PromptTokens = ReadTokenCount(usage, "prompt_tokens");
+            response.CompletionTokens = ReadTokenCount(usage, "completion_tokens");
+            response.TotalTokens = ReadTokenCount(usage, "total_tokens");
+            response.PromptCacheHitTokens = ReadTokenCount(usage, "prompt_cache_hit_tokens");
+            response.PromptCacheMissTokens = ReadTokenCount(usage, "prompt_cache_miss_tokens");
+            if (usage.TryGetProperty("completion_tokens_details", out var completionDetails)
+                && completionDetails.ValueKind == JsonValueKind.Object)
+            {
+                response.ReasoningTokens = ReadTokenCount(completionDetails, "reasoning_tokens");
+            }
+        }
+
+        return response;
+    }
+
+    private static long? ReadTokenCount(JsonElement usage, string propertyName)
+    {
+        return usage.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt64()
+            : null;
     }
     #endregion
 }

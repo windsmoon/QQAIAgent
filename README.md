@@ -16,9 +16,9 @@
 
 调用日志记录每轮模型请求的开始、结束原因、工具调用数、回复字符数和耗时，以及每个工具的开始、完成、结果字符数和耗时。模型失败、工具失败、超时或跳过、空回复和次数上限使用 Warning 日志，请求取消使用 Information 日志。日志作用域携带群号、发送者、模型轮次及工具名称、调用 ID，便于追踪完整请求。控制台时间戳和作用域显示由 `QQAIAgent.Host/appsettings.json` 中的 `Logging.Console.FormatterOptions` 配置。
 
-进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。数据库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
+进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。每轮模型调用还记录接口返回的输入、输出、总 Token、输入缓存命中和未命中 Token，以及可选的思考 Token；思考 Token 属于输出 Token，不重复计入总量。DeepSeek 字段语义见[官方用量说明](https://api-docs.deepseek.com/api/create-chat-completion/)。接口未返回的用量字段保留 `NULL`，实际为零时保存 `0`。数据库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
 
-数据库路径由 `QQAIAgent.Host/appsettings.json` 中的 `Database.Path` 配置，默认是程序目录下的 `Data/qqaiaagent.sqlite3`。Host 在连接 NapCat 前创建目录、表和统计视图，并启用 WAL。`request_statistics` 提供每个请求的模型和工具调用次数，`tool_usage` 按机器人 QQ、群号、用户 QQ 和工具名称汇总使用次数及状态。历史统计不作为后续请求的模型上下文；参考库中的旧数据不自动导入。
+数据库路径由 `QQAIAgent.Host/appsettings.json` 中的 `Database.Path` 配置，默认是程序目录下的 `Data/qqaiaagent.sqlite3`。Host 在连接 NapCat 前创建目录、包含 Token 字段的表和统计视图，并启用 WAL。`request_statistics` 提供每个请求的模型和工具调用次数，以及各轮已知 Token 用量之和；没有已知用量时汇总为 `NULL`，存在未返回用量的轮次时汇总只包含已知部分。`tool_usage` 按机器人 QQ、群号、用户 QQ 和工具名称汇总使用次数及状态。历史统计不作为后续请求的模型上下文；参考库中的旧数据不自动导入。
 
 - 所有群共用一个容量为 100 的消息队列，按顺序完成每条消息的模型与工具调用和 QQ 回复。
 - 模型实例作为单例复用，每条 QQ 请求单独维护消息列表，包含当前问题和本次调用的模型、工具消息，请求结束后不保存历史上下文。
@@ -49,12 +49,13 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 
 ## 业务配置
 
-业务 JSON 统一放在 `QQAIAgent/Config/`，与解决方案中的各项目文件夹同级。将模板复制为对应的 `*.local.json`，再填写实际配置；本地配置由 Git 忽略。
+业务 JSON 和系统提示词 Markdown 文件统一放在 `QQAIAgent/Config/`，与解决方案中的各项目文件夹同级。将 JSON 模板复制为对应的 `*.local.json`，将 `system-prompt.example.md` 复制为 `system-prompt.local.md`，再填写实际配置；本地配置和本地系统提示词由 Git 忽略。
 
 | 模板 | 本地配置 | 内容 | 读取方 |
 | --- | --- | --- | --- |
 | `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号、启动及接口调用和断开连接的超时秒数 | Host |
-| `agent.example.json` | `agent.local.json` | 群白名单、测试模式、每条请求的模型调用次数上限、总超时秒数、系统提示词 | Host |
+| `agent.example.json` | `agent.local.json` | 群白名单、测试模式、每条请求的模型调用次数上限、总超时秒数 | Host |
+| `system-prompt.example.md` | `system-prompt.local.md` | 系统提示词正文 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
 | `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 联网搜索工具 |
@@ -85,8 +86,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
   "IsTestMode": false,
   "MaxModelCalls": 10,
   "QQRequestTimeoutSeconds": 300,
-  "MaxReferenceDepth": 3,
-  "SystemPrompt": "你是 QQ 群聊中的聊天助手。用简短的简体中文纯文本直接回答，不使用 Markdown，默认用 1～3 句话，尽量控制在 150 字以内。"
+  "MaxReferenceDepth": 3
 }
 ```
 
@@ -96,7 +96,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 
 `QQRequestTimeoutSeconds` 控制单条 QQ 用户请求从接收到正常回复的总超时秒数，填写正数，省略时默认为 300。计时从 Host 收到请求起，覆盖排队、引用读取、所有模型轮次、工具调用和正常回复；进入下一轮不会重新计时。排队耗尽时限的请求在出队后直接回复超时提示，不再读取引用或调用模型、工具。DeepSeek 的 `TimeoutSeconds` 和各工具的 `TimeoutSeconds` 仍控制各自单次调用，与总时限共同生效，先到达的时限触发取消。超时提示发送和结束统计在处理取消后完成。修改配置后需将配置复制到宿主目录并重启。
 
-`SystemPrompt` 用于指导群聊回复格式和风格，省略或留空时不发送系统消息。模板中的默认提示词要求简体中文纯文本、自然直接、不使用 Markdown，通常用 1～3 句话并尽量控制在 150 字以内；搜索和网页内容只提炼关键信息，来源链接直接使用 URL。用户明确要求详细说明时可适当展开。格式和篇幅由提示词引导模型生成，程序不会按字数截断或删除 Markdown。该配置由 Host 在启动时读取，修改后需同步到宿主目录并重新启动。
+Host 在启动时固定读取宿主目录下的 `Config/system-prompt.local.md`，将文件全文作为系统消息，不渲染 Markdown；文件内容为空白时不发送系统消息，文件缺失或不可读取时启动会失败。模板中的默认提示词要求简体中文纯文本、自然直接、不使用 Markdown，通常用 1～3 句话并尽量控制在 150 字以内；搜索和网页内容只提炼关键信息，来源链接直接使用 URL。用户明确要求详细说明时可适当展开。格式和篇幅由提示词引导模型生成，程序不会按字数截断或删除 Markdown。修改提示词文件后需同步到宿主目录并重新启动。
 
 ## 本地运行
 
@@ -106,7 +106,7 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek 和内置工具插件；模型程序集复制到宿主输出目录，工具插件及其依赖复制到 `Plugins/QQAIAgent.Tools/`。
 5. 在白名单群中发送 `123 你好` 测试文本回复，或发送 `123 请用 get_time 获取当前时间` 测试工具调用。模型请求获取时间时，Agent 执行 `GetTimeTool`，将结果交回模型生成最终回答，再回复该群。
 
-修改源目录中的 JSON 后，需要将更新后的配置复制到宿主程序目录的 `Config/`；重新构建 Host 会按项目配置执行复制。NapCat、Agent 和工具定义配置在启动时读取，DeepSeek 配置在模型实例创建时读取，更新后需要重新启动宿主才能生效。联网搜索配置在每次调用时读取，更新宿主目录中的该文件后，下次搜索即可生效。
+修改源目录中的 JSON 或系统提示词 Markdown 文件后，需要将更新后的文件复制到宿主程序目录的 `Config/`；重新构建 Host 会按项目配置执行复制。NapCat、Agent、系统提示词和工具定义配置在启动时读取，DeepSeek 配置在模型实例创建时读取，更新后需要重新启动宿主才能生效。联网搜索配置在每次调用时读取，更新宿主目录中的该文件后，下次搜索即可生效。
 
 ## 工具插件
 
@@ -171,6 +171,7 @@ var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, t
 └── Config/
     ├── napcat.local.json
     ├── agent.local.json
+    ├── system-prompt.local.md
     ├── deepseek.local.json
     ├── tools.local.json
     └── websearch.local.json
