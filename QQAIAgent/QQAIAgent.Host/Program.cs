@@ -10,6 +10,7 @@ using QQAIAgent.Host;
 using QQAIAgent.Host.Logging;
 using QQAIAgent.Host.Plugin;
 using QQAIAgent.Infrastructure.Database;
+using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
@@ -28,6 +29,9 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
+
+var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
+builder.Services.AddSingleton(new GroupMessageStore(messagesDirectoryPath));
 
 var configDirectory = Path.Combine(AppContext.BaseDirectory, "Config");
 var napCatConfigPath = Path.Combine(configDirectory, "napcat.local.json");
@@ -64,4 +68,5 @@ builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
 await host.Services.GetRequiredService<RequestStatistics>().InitializeAsync(CancellationToken.None);
+await host.Services.GetRequiredService<GroupMessageStore>().InitializeAsync(agentConfig.AllowedGroups, CancellationToken.None);
 host.Run();

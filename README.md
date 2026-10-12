@@ -16,9 +16,11 @@
 
 调用日志记录每轮模型请求的开始、结束原因、工具调用数、回复字符数和耗时，以及每个工具的开始、完成、结果字符数和耗时。模型失败、工具失败、超时或跳过、空回复和次数上限使用 Warning 日志，请求取消使用 Information 日志。日志作用域携带群号、发送者、模型轮次及工具名称、调用 ID，便于追踪完整请求。控制台时间戳和作用域显示由 `QQAIAgent.Host/appsettings.json` 中的 `Logging.Console.FormatterOptions` 配置。
 
-进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。每轮模型调用还记录接口返回的输入、输出、总 Token、输入缓存命中和未命中 Token，以及可选的思考 Token；思考 Token 属于输出 Token，不重复计入总量。DeepSeek 字段语义见[官方用量说明](https://api-docs.deepseek.com/api/create-chat-completion/)。接口未返回的用量字段保留 `NULL`，实际为零时保存 `0`。数据库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
+进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。每轮模型调用还记录接口返回的输入、输出、总 Token、输入缓存命中和未命中 Token，以及可选的思考 Token；思考 Token 属于输出 Token，不重复计入总量。DeepSeek 字段语义见[官方用量说明](https://api-docs.deepseek.com/api/create-chat-completion/)。接口未返回的用量字段保留 `NULL`，实际为零时保存 `0`。统计库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
 
 数据库路径由 `QQAIAgent.Host/appsettings.json` 中的 `Database.Path` 配置，默认是程序目录下的 `Data/qqaiaagent.sqlite3`。Host 在连接 NapCat 前创建目录、包含 Token 字段的表和统计视图，并启用 WAL。`request_statistics` 提供每个请求的模型和工具调用次数，以及各轮已知 Token 用量之和；没有已知用量时汇总为 `NULL`，存在未返回用量的轮次时汇总只包含已知部分。`tool_usage` 按机器人 QQ、群号、用户 QQ 和工具名称汇总使用次数及状态。历史统计不作为后续请求的模型上下文；参考库中的旧数据不自动导入。
+
+群消息由基础设施中的 `GroupMessageStore` 单独记录，只保存 `AllowedGroups` 内的群，每个群对应一个 `Data/Messages/<群号>.sqlite3` 文件，目录可通过 `Database.MessagesDirectory` 配置。Host 在连接 NapCat 前为允许的群创建 `messages` 表及消息 ID、发送时间索引。每次收到群消息上报都先记录，再解析正文和判断是否需要处理；机器人自身上报、未触发指令、不支持的内容及后续处理失败的消息也会保留。记录消息 ID、发送时间（Unix 秒）、发送者 QQ、昵称、群名片、子类型、完整消息正文 JSON 和引用消息 ID；数组消息和 CQ 字符串都保留原值，包括触发前缀、艾特及未知消息段，重复上报逐次插入。不记录私聊、接收账号、程序接收时间或完整原始报文。
 
 - 所有群共用一个容量为 100 的消息队列，按顺序完成每条消息的模型与工具调用和 QQ 回复。
 - 模型实例作为单例复用，每条 QQ 请求单独维护消息列表，包含当前问题和本次调用的模型、工具消息，请求结束后不保存历史上下文。

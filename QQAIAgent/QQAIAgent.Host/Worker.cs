@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 using System.Threading.Channels;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Config;
+using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
 using QQAIAgent.NapCat;
@@ -10,7 +12,7 @@ using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.Host;
 
-public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, AgentConfig agentConfig, NapCatConfig napCatConfig, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
+public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, GroupMessageStore groupMessageStore, AgentConfig agentConfig, NapCatConfig napCatConfig, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
 {
     #region fields
     private readonly Channel<(GroupMessage Message, long ReceivedTimestamp)> _messages = Channel.CreateBounded<(GroupMessage Message, long ReceivedAt)>(new BoundedChannelOptions(50)
@@ -27,6 +29,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         Task? processingTask = null;
         Task? disconnectTask = null;
+        napCatClient.GroupMessageReceiving += RecordGroupMessageAsync;
         napCatClient.GroupMessageReceived += OnGroupMessageReceived;
         try
         {
@@ -83,9 +86,16 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             finally
             {
                 await napCatClient.DisconnectAsync();
+                napCatClient.GroupMessageReceiving -= RecordGroupMessageAsync;
                 logger.LogInformation("NapCat 后台服务已停止。");
             }
         }
+    }
+
+    private Task RecordGroupMessageAsync(JsonElement message)
+    {
+        // 当前消息已收到，停止处理任务时也应完成记录；允许的群由存储初始化列表决定。
+        return groupMessageStore.RecordAsync(message, CancellationToken.None);
     }
 
     private void OnGroupMessageReceived(GroupMessage message)
