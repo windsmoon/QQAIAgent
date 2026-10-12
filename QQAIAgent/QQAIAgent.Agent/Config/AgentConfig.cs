@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace QQAIAgent.Agent.Config;
 
 public class AgentConfig
@@ -12,7 +14,8 @@ public class AgentConfig
     public int QQRequestTimeoutSeconds { get; set; } = 300;
     /// <summary>允许展开的最大引用层数，不包含当前消息；0 表示不读取引用。</summary>
     public int MaxReferenceDepth { get; set; } = 3;
-    /// <summary>用于指导 QQ 群聊回复格式和风格的系统提示词；空白时不发送系统消息。</summary>
+    /// <summary>启动时从 Markdown 文件加载的系统提示词；空白时不发送系统消息。</summary>
+    [JsonIgnore]
     public string SystemPrompt { get; set; } = string.Empty;
     #endregion
     

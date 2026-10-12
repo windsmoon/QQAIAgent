@@ -46,6 +46,7 @@ BenchmarkDotNet.Artifacts/
 !.env.*.template
 *.local.json
 *.Local.json
+/QQAIAgent/Config/system-prompt.local.md
 secrets.json
 *.secrets.json
 /secrets/
