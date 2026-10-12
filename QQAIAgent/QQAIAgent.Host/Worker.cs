@@ -109,8 +109,9 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
             return;
         }
 
+        // Microsoft.Data.Sqlite 的异步接口实际同步执行，将写入交给线程池，避免阻塞接收循环。
         // 记录与业务处理独立，原始正文不受后续前缀和艾特移除影响。
-        _ = RecordGroupMessageAsync(message);
+        _ = Task.Run(() => RecordGroupMessageAsync(message));
         if (message.SenderId == napCatConfig.BotAccount)
         {
             return;
