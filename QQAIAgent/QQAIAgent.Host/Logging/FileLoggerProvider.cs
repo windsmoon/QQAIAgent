@@ -46,7 +46,6 @@ internal sealed class FileLoggerProvider : ILoggerProvider, ISupportExternalScop
         {
             entry.AppendLine().Append(exception);
         }
-        entry.AppendLine();
 
         // 多个日志分类共用文件，整条日志加锁写入，避免并发消息互相穿插。
         lock (_sync)
