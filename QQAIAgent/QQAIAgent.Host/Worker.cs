@@ -128,7 +128,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         // 接收回调中不能等待消息处理完成，同一个接收循环还需要继续读取 API 响应。
         if (_messages.Writer.TryWrite((message, receivedAt)) == false)
         {
-            logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+            logger.LogWarning("群消息队列已满或已关闭，跳过消息：群={GroupId}，发送者={SenderId}{NewLine}", message.GroupId, message.SenderId, Environment.NewLine);
             napCatClient.SendGroupMessageAsync(message.GroupId, message.SenderId, "群消息队列已满，请稍后再试", message.MessageId, message.NeedAtInReply, new CancellationToken());
         }
     }
@@ -158,6 +158,10 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             catch (Exception exception)
             {
                 logger.LogWarning(exception, "群消息处理或发送未完成：群={GroupId}，发送者={SenderId}", message.GroupId, message.SenderId);
+            }
+            finally
+            {
+                logger.LogInformation("群消息处理结束：群={GroupId}，发送者={SenderId}{NewLine}", message.GroupId, message.SenderId, Environment.NewLine);
             }
         }
     }
