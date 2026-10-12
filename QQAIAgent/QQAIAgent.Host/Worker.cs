@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.Json;
 using System.Threading.Channels;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Config;
@@ -29,7 +28,6 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
         using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         Task? processingTask = null;
         Task? disconnectTask = null;
-        napCatClient.GroupMessageReceiving += RecordGroupMessageAsync;
         napCatClient.GroupMessageReceived += OnGroupMessageReceived;
         try
         {
@@ -86,27 +84,34 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
             finally
             {
                 await napCatClient.DisconnectAsync();
-                napCatClient.GroupMessageReceiving -= RecordGroupMessageAsync;
                 logger.LogInformation("NapCat 后台服务已停止。");
             }
         }
     }
 
-    private Task RecordGroupMessageAsync(JsonElement message)
+    private async Task RecordGroupMessageAsync(GroupMessage message)
     {
-        // 当前消息已收到，停止处理任务时也应完成记录；允许的群由存储初始化列表决定。
-        return groupMessageStore.RecordAsync(message, CancellationToken.None);
+        try
+        {
+            await groupMessageStore.RecordAsync(message, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "群消息记录失败：群={GroupId}，消息ID={MessageId}", message.GroupId, message.MessageId);
+        }
     }
 
     private void OnGroupMessageReceived(GroupMessage message)
     {
         var receivedAt = Stopwatch.GetTimestamp();
-        if (message.SenderId == napCatConfig.BotAccount)
+        if (agentConfig.AllowedGroups.Contains(message.GroupId) == false)
         {
             return;
         }
 
-        if (agentConfig.AllowedGroups.Contains(message.GroupId) == false)
+        // 记录与业务处理独立，原始正文不受后续前缀和艾特移除影响。
+        _ = RecordGroupMessageAsync(message);
+        if (message.SenderId == napCatConfig.BotAccount)
         {
             return;
         }

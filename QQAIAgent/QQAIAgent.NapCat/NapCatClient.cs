@@ -25,11 +25,6 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
 
     #region events
     /// <summary>
-    /// 在正文解析和分发前接收群消息原始字段。处理器不能等待 NapCat API 响应。
-    /// </summary>
-    public event Func<JsonElement, Task>? GroupMessageReceiving;
-
-    /// <summary>
     /// 发布群消息。处理器在接收循环中运行，不能阻塞等待 API 响应。
     /// </summary>
     public event Action<GroupMessage>? GroupMessageReceived;
@@ -280,19 +275,14 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
 
                         if (IsGroupMessageEvent(root))
                         {
-                            if (GroupMessageReceiving is { } receiving)
-                            {
-                                await receiving(root);
-                            }
-
                             var groupMessage = ParseGroupMessage(root);
                             GroupMessageReceived?.Invoke(groupMessage);
                         }
                     }
                     catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
                     {
-                        // 单条消息的记录、字段解析或回调失败，不影响后续消息和 API 响应的接收。
-                        logger.LogWarning(exception, "NapCat 消息记录、解析或分发失败，已跳过当前消息。");
+                        // 单条消息的字段解析或回调失败，不影响后续消息和 API 响应的接收。
+                        logger.LogWarning(exception, "NapCat 消息解析或分发失败，已跳过当前消息。");
                     }
                 }
             }
@@ -313,7 +303,7 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
 
     private static bool IsGroupMessageEvent(JsonElement root)
     {
-        // message_sent 是机器人自身消息的上报，同样先记录，再由处理端排除自身消息。
+        // message_sent 是机器人自身消息的上报，同样触发记录，再由处理端排除自身消息。
         return root.TryGetProperty("post_type", out var postType)
             && postType.GetString() is "message" or "message_sent"
             && root.GetProperty("message_type").GetString() == "group";
@@ -322,16 +312,28 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
     // 群消息事件与 get_msg 响应共用内容解析；API 响应不依赖事件的 post_type。
     private static GroupMessage ParseGroupMessage(JsonElement root)
     {
+        var message = root.GetProperty("message");
+        root.TryGetProperty("sender", out var sender);
         var groupMessage = new GroupMessage
         {
             // 事件与 get_msg 响应都带消息 ID，用于回复时引用提问消息。
             MessageId = root.TryGetProperty("message_id", out var messageId) && messageId.ValueKind != JsonValueKind.Null
                 ? ReadMessageInteger(messageId)
                 : null,
+            MessageTime = root.TryGetProperty("time", out var time) && time.ValueKind != JsonValueKind.Null
+                ? ReadMessageInteger(time)
+                : null,
             GroupId = ReadMessageInteger(root.GetProperty("group_id")),
-            SenderId = ReadMessageInteger(root.GetProperty("user_id"))
+            SenderId = ReadMessageInteger(root.GetProperty("user_id")),
+            SenderNickname = sender.ValueKind == JsonValueKind.Object && sender.TryGetProperty("nickname", out var nickname)
+                ? nickname.GetString() ?? ""
+                : "",
+            SenderCard = sender.ValueKind == JsonValueKind.Object && sender.TryGetProperty("card", out var card)
+                ? card.GetString() ?? ""
+                : "",
+            SubType = root.TryGetProperty("sub_type", out var subType) ? subType.GetString() ?? "" : "",
+            ContentJson = message.GetRawText()
         };
-        var message = root.GetProperty("message");
         // napcat 配置决定是发来原始文本消息还是已经解析好的数组
         if (message.ValueKind == JsonValueKind.String)
         {

@@ -1,8 +1,7 @@
 using System.Globalization;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
+using QQAIAgent.Messaging;
 
 namespace QQAIAgent.Infrastructure.Messages;
 
@@ -51,17 +50,14 @@ public sealed class GroupMessageStore(string directoryPath)
         }
     }
 
-    /// <summary>从群消息上报中保存发送信息和完整正文，不保存完整报文，也不依赖正文类型是否受支持。</summary>
-    public Task RecordAsync(JsonElement messageEvent, CancellationToken cancellationToken)
+    /// <summary>保存发送信息和完整原始正文，不依赖业务处理时修改的消息段。</summary>
+    public Task RecordAsync(GroupMessage message, CancellationToken cancellationToken)
     {
-        var groupId = ReadInteger(messageEvent.GetProperty("group_id"));
-        if (_databases.TryGetValue(groupId, out var database) == false)
+        if (_databases.TryGetValue(message.GroupId, out var database) == false)
         {
             return Task.CompletedTask;
         }
 
-        var message = messageEvent.GetProperty("message");
-        messageEvent.TryGetProperty("sender", out var sender);
         return database.ExecuteAsync("""
             INSERT INTO messages (message_id, message_time, sender_id, sender_nickname,
                 sender_card, sub_type, content_json, ref_message_id)
@@ -69,60 +65,15 @@ public sealed class GroupMessageStore(string directoryPath)
                 @SenderCard, @SubType, @ContentJson, @RefMessageId);
             """, new
         {
-            MessageId = messageEvent.TryGetProperty("message_id", out var messageId) && messageId.ValueKind != JsonValueKind.Null
-                ? ReadInteger(messageId)
-                : (long?)null,
-            MessageTime = ReadInteger(messageEvent.GetProperty("time")),
-            SenderId = ReadInteger(messageEvent.GetProperty("user_id")),
-            SenderNickname = sender.ValueKind == JsonValueKind.Object && sender.TryGetProperty("nickname", out var nickname)
-                ? nickname.GetString() ?? ""
-                : "",
-            SenderCard = sender.ValueKind == JsonValueKind.Object && sender.TryGetProperty("card", out var card)
-                ? card.GetString() ?? ""
-                : "",
-            SubType = messageEvent.TryGetProperty("sub_type", out var subType) ? subType.GetString() ?? "" : "",
-            // 只保存 message 字段原值，数组消息和 CQ 字符串都保留原有内容及顺序。
-            ContentJson = message.GetRawText(),
-            RefMessageId = ReadReferenceMessageId(message)
+            message.MessageId,
+            message.MessageTime,
+            message.SenderId,
+            message.SenderNickname,
+            message.SenderCard,
+            message.SubType,
+            message.ContentJson,
+            message.RefMessageId
         }, cancellationToken);
-    }
-
-    private static long? ReadReferenceMessageId(JsonElement message)
-    {
-        long? referenceMessageId = null;
-        if (message.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var segment in message.EnumerateArray())
-            {
-                if (segment.GetProperty("type").GetString() == "reply")
-                {
-                    referenceMessageId = ReadInteger(segment.GetProperty("data").GetProperty("id"));
-                }
-            }
-        }
-        else if (message.ValueKind == JsonValueKind.String)
-        {
-            // 与消息解析保持一致，只识别未转义的 CQ 引用，多个引用取最后一个。
-            foreach (Match match in Regex.Matches(message.GetString() ?? "", @"\[CQ:reply(?<data>(?:,[a-zA-Z0-9_]+=[^,\]]*)*)\]"))
-            {
-                foreach (var parameter in match.Groups["data"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (parameter.StartsWith("id=", StringComparison.Ordinal))
-                    {
-                        referenceMessageId = long.Parse(parameter[3..], CultureInfo.InvariantCulture);
-                    }
-                }
-            }
-        }
-
-        return referenceMessageId;
-    }
-
-    private static long ReadInteger(JsonElement value)
-    {
-        return value.ValueKind == JsonValueKind.Number
-            ? value.GetInt64()
-            : long.Parse(value.GetString() ?? "", CultureInfo.InvariantCulture);
     }
     #endregion
 }

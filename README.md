@@ -20,7 +20,7 @@
 
 数据库路径由 `QQAIAgent.Host/appsettings.json` 中的 `Database.Path` 配置，默认是程序目录下的 `Data/qqaiaagent.sqlite3`。Host 在连接 NapCat 前创建目录、包含 Token 字段的表和统计视图，并启用 WAL。`request_statistics` 提供每个请求的模型和工具调用次数，以及各轮已知 Token 用量之和；没有已知用量时汇总为 `NULL`，存在未返回用量的轮次时汇总只包含已知部分。`tool_usage` 按机器人 QQ、群号、用户 QQ 和工具名称汇总使用次数及状态。历史统计不作为后续请求的模型上下文；参考库中的旧数据不自动导入。
 
-群消息由基础设施中的 `GroupMessageStore` 单独记录，只保存 `AllowedGroups` 内的群，每个群对应一个 `Data/Messages/<群号>.sqlite3` 文件，目录可通过 `Database.MessagesDirectory` 配置。Host 在连接 NapCat 前为允许的群创建 `messages` 表及消息 ID、发送时间索引。每次收到群消息上报都先记录，再解析正文和判断是否需要处理；机器人自身上报、未触发指令、不支持的内容及后续处理失败的消息也会保留。记录消息 ID、发送时间（Unix 秒）、发送者 QQ、昵称、群名片、子类型、完整消息正文 JSON 和引用消息 ID；数组消息和 CQ 字符串都保留原值，包括触发前缀、艾特及未知消息段，重复上报逐次插入。不记录私聊、接收账号、程序接收时间或完整原始报文。
+群消息由基础设施中的 `GroupMessageStore` 单独记录，只保存 `AllowedGroups` 内的群，每个群对应一个 `Data/Messages/<群号>.sqlite3` 文件，目录可通过 `Database.MessagesDirectory` 配置。Host 在连接 NapCat 前为允许的群创建 `messages` 表及消息 ID、发送时间索引。`OnGroupMessageReceived` 在确认群号允许后触发记录任务，业务处理不等待记录完成，记录失败单独写入日志；机器人自身上报、未触发指令、不支持的内容及后续处理失败的消息也会保留。记录消息 ID、发送时间（Unix 秒）、发送者 QQ、昵称、群名片、子类型、完整消息正文 JSON 和引用消息 ID；数组消息和 CQ 字符串都保留原值，包括触发前缀、艾特及未知消息段，重复上报逐次插入。不记录私聊、接收账号、程序接收时间或完整原始报文。
 
 - 所有群共用一个容量为 100 的消息队列，按顺序完成每条消息的模型与工具调用和 QQ 回复。
 - 模型实例作为单例复用，每条 QQ 请求单独维护消息列表，包含当前问题和本次调用的模型、工具消息，请求结束后不保存历史上下文。
