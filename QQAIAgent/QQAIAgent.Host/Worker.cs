@@ -32,7 +32,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         {
             using (var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
             {
-                startupTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+                startupTimeout.CancelAfter(TimeSpan.FromSeconds(napCatConfig.StartupTimeoutSeconds));
                 try
                 {
                     logger.LogInformation("正在连接 NapCat WebSocket 服务。");
@@ -44,7 +44,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested == false)
                 {
-                    throw new TimeoutException("NapCat 连接或账号核验超时（30 秒）。");
+                    throw new TimeoutException($"NapCat 连接或账号核验超时（{napCatConfig.StartupTimeoutSeconds} 秒）。");
                 }
             }
 

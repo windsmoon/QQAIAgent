@@ -97,7 +97,7 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
     public async Task DisconnectAsync()
     {
         // The stopping token may already be canceled; use a separate timeout for the closing handshake.
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(config.DisconnectTimeoutSeconds));
         try
         {
             await _requestLock.WaitAsync(timeout.Token);
@@ -165,7 +165,7 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
     private async Task<JsonElement> CallApiAsync(string action, object parameters, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _receiveCancellation.Token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        timeout.CancelAfter(TimeSpan.FromSeconds(config.ApiTimeoutSeconds));
 
         var acquired = false;
         try
@@ -212,7 +212,7 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
             cancellationToken.IsCancellationRequested == false
             && _receiveCancellation.IsCancellationRequested == false)
         {
-            throw new TimeoutException($"NapCat 接口 {action} 调用超时（30 秒）。");
+            throw new TimeoutException($"NapCat 接口 {action} 调用超时（{config.ApiTimeoutSeconds} 秒）。");
         }
         finally
         {

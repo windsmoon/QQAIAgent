@@ -53,11 +53,21 @@ Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel`
 
 | 模板 | 本地配置 | 内容 | 读取方 |
 | --- | --- | --- | --- |
-| `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号 | Host |
+| `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号、启动及接口调用和断开连接的超时秒数 | Host |
 | `agent.example.json` | `agent.local.json` | 群白名单、测试模式、每条请求的模型调用次数上限、总超时秒数、系统提示词 | Host |
 | `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
 | `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
 | `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 联网搜索工具 |
+
+`napcat.local.json` 的三个超时字段以秒为单位，填写正数；省略时使用下表默认值。Host 在启动时读取配置，修改后需将配置复制到宿主目录并重启。
+
+| 字段 | 默认值 | 范围 |
+| --- | --- | --- |
+| `StartupTimeoutSeconds` | 30 | 启动时连接 WebSocket 与账号核验共用一个总时限 |
+| `ApiTimeoutSeconds` | 30 | 每次 NapCat 接口调用，包括等待接口锁、发送请求和接收响应；读取引用与发送回复均适用 |
+| `DisconnectTimeoutSeconds` | 5 | 断开连接时等待接口锁、关闭握手和等待接收循环结束共用一个时限 |
+
+启动账号核验同时受启动总时限与单次接口时限控制；QQ 请求中的 NapCat 接口调用同时受接口时限与 `QQRequestTimeoutSeconds` 控制，先到达的时限触发取消。
 
 `websearch.local.json` 使用腾讯云联网搜索的服务 API KEY 接入方式，`ApiKey` 填写联网搜索服务密钥，`Endpoint` 填写完整请求地址，模板为 `https://api.wsa.cloud.tencent.com/SearchPro`。密钥获取与接口说明见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。配置在每次调用联网搜索时读取，未调用搜索时不读取该文件。
 

@@ -1,5 +1,8 @@
 {
   "WebSocketUrl": "ws://YOUR_SERVER_IP:3001",
   "AccessToken": "",
-  "BotAccount": 0
+  "BotAccount": 0,
+  "StartupTimeoutSeconds": 30,
+  "ApiTimeoutSeconds": 30,
+  "DisconnectTimeoutSeconds": 5
 }
