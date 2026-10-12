@@ -23,7 +23,7 @@
 
     <ItemGroup>
       <Content Include="..\Config\*.json" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-      <Content Include="..\Config\*.md" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="..\Config\*.md" Link="Config\%(Filename)%(Extension)" TargetPath="Config\%(Filename)%(Extension)" Visible="true" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
 
     <!-- 项目引用只负责构建插件，运行时从 Plugins 目录加载。 -->
