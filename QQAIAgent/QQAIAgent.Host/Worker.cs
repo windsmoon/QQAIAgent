@@ -104,9 +104,10 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
             .OfType<TextContent>()
             .FirstOrDefault();
         var text = textContent?.Text.TrimStart() ?? "";
-        var hasPrefix = text.StartsWith("123");
+        var commandPrefix = agentConfig.IsTestMode ? "321" : "123";
+        var hasPrefix = text.StartsWith(commandPrefix, StringComparison.Ordinal);
         var botAccount = napCatConfig.BotAccount.ToString(CultureInfo.InvariantCulture);
-        var isBotMentioned = message.MessageContentList
+        var isBotMentioned = agentConfig.IsTestMode == false && message.MessageContentList
             .Any(content => content is AtContent atContent && atContent.Target == botAccount);
         if (hasPrefix == false && isBotMentioned == false)
         {
@@ -115,7 +116,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, A
         // 合法请求入队前移除触发前缀和机器人艾特，保留其他消息段及其顺序。
         if (hasPrefix)
         {
-            textContent.Text = text[3..];
+            textContent.Text = text[commandPrefix.Length..];
         }
         message.MessageContentList.RemoveAll(content => content is AtContent atContent && atContent.Target == botAccount);
         logger.LogInformation("收到群消息：群={GroupId}，发送者={SenderId}，消息段数={ContentCount}，开头文本={Text}",
