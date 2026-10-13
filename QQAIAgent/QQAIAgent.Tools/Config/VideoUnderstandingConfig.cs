@@ -19,6 +19,6 @@ public sealed class VideoUnderstandingConfig
     /// <summary>允许输入的视频时长上限，单位为秒。</summary>
     public double MaxVideoDurationSeconds { get; set; } = 180;
     /// <summary>ffprobe 可执行文件；默认使用随程序部署的版本，带目录的相对路径以程序目录为基准。</summary>
-    public string FfprobePath { get; set; } = "Tools/FFmpeg/ffprobe.exe";
+    public string FfprobePath { get; set; } = "Third/FFmpeg/ffprobe.exe";
     #endregion
 }

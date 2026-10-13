@@ -233,7 +233,8 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
             var retcode = root.GetProperty("retcode").GetInt32();
             if (root.GetProperty("status").GetString() != "ok" || retcode != 0)
             {
-                throw new InvalidOperationException($"NapCat 接口 {action} 调用失败，retcode={retcode}。");
+                var message = ReadOptionalString(root, "message");
+                throw new InvalidOperationException($"NapCat 接口 {action} 调用失败，retcode={retcode}，message={message}。");
             }
 
             return root.GetProperty("data");

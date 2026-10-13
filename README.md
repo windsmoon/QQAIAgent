@@ -92,7 +92,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 工具在请求百炼前使用 ffprobe 读取视频的实际大小与时长，不依赖 NapCat 是否提供时长。`MaxVideoSizeMB` 默认 `100`（每 MB 按 1024 × 1024 字节计算），`MaxVideoDurationSeconds` 默认 `180`；超过任一上限时提示裁剪，无法确定大小或时长时返回说明，均不调用百炼。探测与模型调用共用工具超时和 QQ 请求总时限，取消时会终止 ffprobe 子进程。
 
-ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Tools/FFmpeg/`。`FfprobePath` 默认值为 `Tools/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
+ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Third/FFmpeg/`。`FfprobePath` 默认值为 `Third/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
 
 每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
