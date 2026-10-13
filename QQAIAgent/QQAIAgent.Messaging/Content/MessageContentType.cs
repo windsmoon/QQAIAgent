@@ -5,6 +5,7 @@ public enum MessageContentType
     Text,
     Image,
     At,
+    Face,
     Video,
     Forward,
     Unknown

@@ -371,6 +371,27 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
                     Target = data.GetProperty("qq").ToString()
                 });
                 break;
+            case "face":
+                {
+                    var faceId = ReadMessageInteger(data.GetProperty("id"));
+                    message.MessageContentList.Add(new FaceContent
+                    {
+                        Id = faceId,
+                        // 未知 ID 保留空名称，由处理端降级显示。
+                        Name = QqFaceTable.GetName(faceId)
+                    });
+                }
+                break;
+            case "mface":
+                {
+                    // 商城表情本质是表情包图片，按图片处理；summary 是 QQ 官方的表情描述文字。
+                    message.MessageContentList.Add(new ImageContent
+                    {
+                        Url = data.TryGetProperty("url", out var mfaceUrl) ? mfaceUrl.GetString() ?? "" : "",
+                        Summary = data.TryGetProperty("summary", out var mfaceSummary) ? mfaceSummary.GetString() ?? "" : ""
+                    });
+                }
+                break;
             case "image":
                 message.MessageContentList.Add(new ImageContent
                 {

@@ -210,6 +210,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                         Text = atContent.Target == "all" ? "@全体成员" : $"@{atContent.Target}"
                     });
                     break;
+                case FaceContent faceContent:
+                    chatContentList.Add(new ChatTextContent
+                    {
+                        // 表情按名称转成文字标记；未知 ID 时退化为通用标记。
+                        Text = faceContent.Name == "" ? "[表情]" : $"[表情:{faceContent.Name}]"
+                    });
+                    break;
                 default:
                     // 沿用其他消息段的处理规则：引用保留文字标记，当前正文跳过。
                     if (isReference)
