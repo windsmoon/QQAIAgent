@@ -117,6 +117,11 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
             return;
         }
 
+        if (agentConfig.BlacklistedGroups.Contains(message.GroupId))
+        {
+            return;
+        }
+
         // 按原消息顺序取第一个文本段匹配指令，跳过前面的非文本段。
         var textContent = message.MessageContentList
             .OfType<TextContent>()
