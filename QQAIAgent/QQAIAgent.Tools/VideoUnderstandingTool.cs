@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -28,7 +30,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
-        var url = arguments.RootElement.GetProperty("url").GetString();
+        var url = arguments.RootElement.GetProperty("url").GetString() ?? "";
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri) == false ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -44,6 +46,23 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         var config = JsonSerializer.Deserialize<VideoUnderstandingConfig>(configJson)
             ?? throw new InvalidDataException($"视频理解配置不能为 null：{configPath}");
 
+        // 在工具入口读取实际视频元数据，正文、引用、转发和直接 URL 调用共用输入限制。
+        var metadata = await ReadVideoMetadataAsync(url, config.FfprobePath, cancellationToken);
+        if (metadata.FileSize > config.MaxVideoSizeMB * 1024L * 1024L)
+        {
+            return JsonSerializer.Serialize(new { url, error = $"视频大小超过 {config.MaxVideoSizeMB} MB，请裁剪后重试。" });
+        }
+
+        if (metadata.DurationSeconds > config.MaxVideoDurationSeconds)
+        {
+            return JsonSerializer.Serialize(new { url, error = $"视频时长超过 {config.MaxVideoDurationSeconds} 秒，请裁剪后重试。" });
+        }
+
+        if (metadata.FileSize <= 0 || metadata.DurationSeconds <= 0 || double.IsFinite(metadata.DurationSeconds) == false)
+        {
+            return JsonSerializer.Serialize(new { url, error = "无法确定视频大小或时长，未调用视频理解，请提供可读取元数据的视频文件。" });
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Post, config.Endpoint)
         {
             Content = JsonContent.Create(new
@@ -52,7 +71,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
                 stream = false,
                 modalities = new[] { "text" },
                 reasoning_effort = config.ReasoningEffort,
-                max_tokens = config.MaxTokens,
+                max_tokens = config.MaxOutputTokens,
                 messages = new[]
                 {
                     new
@@ -92,6 +111,76 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
+    }
+
+    /// <summary>使用 ffprobe 读取视频 URL 的文件大小和时长，不转码或缓存视频文件。</summary>
+    private static async Task<(long FileSize, double DurationSeconds)> ReadVideoMetadataAsync(string url, string ffprobePath, CancellationToken cancellationToken)
+    {
+        if (Path.IsPathRooted(ffprobePath) == false &&
+            (ffprobePath.Contains(Path.DirectorySeparatorChar) || ffprobePath.Contains(Path.AltDirectorySeparatorChar)))
+        {
+            ffprobePath = Path.GetFullPath(ffprobePath, AppContext.BaseDirectory);
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = ffprobePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        // 逐项传参，视频 URL 不经过 Shell 解释，保留其中的签名和特殊字符。
+        startInfo.ArgumentList.Add("-v");
+        startInfo.ArgumentList.Add("error");
+        startInfo.ArgumentList.Add("-show_entries");
+        startInfo.ArgumentList.Add("format=duration,size");
+        startInfo.ArgumentList.Add("-of");
+        startInfo.ArgumentList.Add("json");
+        startInfo.ArgumentList.Add(url);
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("无法启动 ffprobe。");
+        // 同时读取两个输出管道，避免某个管道写满后阻塞子进程退出。
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+            var output = await outputTask;
+            var error = await errorTask;
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidDataException($"读取视频元数据失败：{error.Trim()}");
+            }
+
+            using var document = JsonDocument.Parse(output);
+            var fileSize = 0L;
+            var durationSeconds = 0d;
+            if (document.RootElement.TryGetProperty("format", out var format))
+            {
+                if (format.TryGetProperty("size", out var size))
+                {
+                    long.TryParse(size.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out fileSize);
+                }
+
+                if (format.TryGetProperty("duration", out var duration))
+                {
+                    double.TryParse(duration.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out durationSeconds);
+                }
+            }
+
+            return (fileSize, durationSeconds);
+        }
+        finally
+        {
+            // 工具超时或宿主取消时终止 ffprobe，不能只取消等待而留下后台探测进程。
+            if (process.HasExited == false)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+        }
     }
     #endregion
 }

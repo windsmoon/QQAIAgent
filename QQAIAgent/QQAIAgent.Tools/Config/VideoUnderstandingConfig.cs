@@ -13,6 +13,12 @@ public sealed class VideoUnderstandingConfig
     /// <summary>思考强度，none 关闭思考；支持 minimal、low、medium、high、xhigh、max。</summary>
     public string ReasoningEffort { get; set; } = "none";
     /// <summary>模型单次输出的最大 Token 数。</summary>
-    public int MaxTokens { get; set; } = 4096;
+    public int MaxOutputTokens { get; set; } = 4096;
+    /// <summary>允许输入的视频大小上限，单位为 MB，按 1024 × 1024 字节计算。</summary>
+    public int MaxVideoSizeMB { get; set; } = 100;
+    /// <summary>允许输入的视频时长上限，单位为秒。</summary>
+    public double MaxVideoDurationSeconds { get; set; } = 180;
+    /// <summary>ffprobe 可执行文件；默认使用随程序部署的版本，带目录的相对路径以程序目录为基准。</summary>
+    public string FfprobePath { get; set; } = "Tools/FFmpeg/ffprobe.exe";
     #endregion
 }

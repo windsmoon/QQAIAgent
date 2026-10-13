@@ -3,6 +3,9 @@
   "Endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
   "Model": "qwen3.8-omni-flash",
   "Fps": 2,
-  "ReasoningEffort": "none",
-  "MaxTokens": 4096
+  "ReasoningEffort": "low",
+  "MaxOutputTokens": 4096,
+  "MaxVideoSizeMB": 100,
+  "MaxVideoDurationSeconds": 180,
+  "FfprobePath": "../FFmpeg/ffprobe.exe"
 }

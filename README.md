@@ -23,7 +23,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | [tools.example.json](QQAIAgent/Config/tools.example.json) | `tools.local.json` | 按需设置 `Enabled` 和 `TimeoutSeconds`；保留工具名称和参数定义 |
 | [system-prompt.example.md](QQAIAgent/Config/system-prompt.example.md) | `system-prompt.local.md` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
 | [websearch.example.json](QQAIAgent/Config/websearch.example.json) | `websearch.local.json` | 启用 `web_search` 时填写服务 `ApiKey`，确认 `Endpoint`；未使用搜索时不读取此文件 |
-| [videounderstanding.example.json](QQAIAgent/Config/videounderstanding.example.json) | `videounderstanding.local.json` | 启用 `understand_video` 时填写百炼 `ApiKey`，确认 `Endpoint`、`Model`、`Fps`、`ReasoningEffort` 和 `MaxTokens`；未使用视频理解时不读取此文件 |
+| [videounderstanding.example.json](QQAIAgent/Config/videounderstanding.example.json) | `videounderstanding.local.json` | 启用 `understand_video` 时填写百炼 `ApiKey`，确认模型、输出上限、视频输入限制和 `FfprobePath`；未使用视频理解时不读取此文件 |
 
 前五个 local 文件需要准备。模板默认启用获取时间和调整思考强度，关闭联网搜索、网页读取与视频理解；启用搜索或视频理解时再准备对应配置。
 
@@ -88,7 +88,11 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 联网搜索使用服务 API KEY 的 Bearer 鉴权，example 已填写完整地址 `https://api.wsa.cloud.tencent.com/SearchPro`，仍需填写自己的密钥。接入方式见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。网页读取支持重定向、压缩响应及编码识别，提取静态正文，不执行 JavaScript；需要登录或浏览器渲染的网页可能无法获取。
 
-视频理解使用百炼 OpenAI 兼容接口和 Bearer 鉴权，`Endpoint` 填完整的 `chat/completions` 地址，并使用对应地域的 API Key。默认模型为 `qwen3.8-omni-flash`，同时理解视频画面和声音，返回文本。`Fps` 为视频采样帧率，默认 `2`；`ReasoningEffort` 默认 `none`（关闭思考），可设为 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`；`MaxTokens` 限制单次输出，默认 `4096`。视频 URL 直接交给百炼处理，客户端不下载视频、不生成视频 Base64；必须提供百炼可直接访问的视频文件地址，普通视频网页链接不能作为输入。接入方式见[阿里云百炼官方文档](https://help.aliyun.com/zh/model-studio/qwen-omni)。QQ 视频消息段已接入：启用 `understand_video` 并填写百炼配置后，主模型可根据用户问题调用工具分析正文、引用和合并转发中的视频。
+视频理解使用百炼 OpenAI 兼容接口和 Bearer 鉴权，`Endpoint` 填完整的 `chat/completions` 地址，并使用对应地域的 API Key。默认模型为 `qwen3.8-omni-flash`，同时理解视频画面和声音，返回文本。`Fps` 为视频采样帧率，默认 `2`；`ReasoningEffort` 示例使用 `low`，可设为 `none`（关闭思考）、`minimal`、`medium`、`high`、`xhigh`、`max`；`MaxOutputTokens` 限制单次输出，默认 `4096`。视频 URL 直接交给百炼处理，客户端不缓存视频、不生成视频 Base64；必须提供百炼可直接访问的视频文件地址，普通视频网页链接不能作为输入。接入方式见[阿里云百炼官方文档](https://help.aliyun.com/zh/model-studio/qwen-omni)。QQ 视频消息段已接入：启用 `understand_video` 并填写百炼配置后，主模型可根据用户问题调用工具分析正文、引用和合并转发中的视频。
+
+工具在请求百炼前使用 ffprobe 读取视频的实际大小与时长，不依赖 NapCat 是否提供时长。`MaxVideoSizeMB` 默认 `100`（每 MB 按 1024 × 1024 字节计算），`MaxVideoDurationSeconds` 默认 `180`；超过任一上限时提示裁剪，无法确定大小或时长时返回说明，均不调用百炼。探测与模型调用共用工具超时和 QQ 请求总时限，取消时会终止 ffprobe 子进程。
+
+ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Tools/FFmpeg/`。`FfprobePath` 默认值为 `Tools/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
 
 每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
