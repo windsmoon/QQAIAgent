@@ -88,6 +88,20 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
         return ParseGroupMessage(data);
     }
 
+    public async Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken)
+    {
+        // 兼容 message_id 与 id 两种参数名，一并传入。
+        var data = await CallApiAsync("get_forward_msg", new { message_id = resId, id = resId }, cancellationToken);
+        var messages = new List<GroupMessage>();
+        if (data.TryGetProperty("messages", out var nodes) && nodes.ValueKind == JsonValueKind.Array)
+        {
+            // 转发节点结构与群消息事件同构，直接按群消息解析。
+            messages.AddRange(nodes.EnumerateArray().Select(ParseGroupMessage));
+        }
+
+        return messages;
+    }
+
     public async Task WaitForDisconnectAsync(CancellationToken cancellationToken)
     {
         var receiveTask = _receiveTask ?? throw new InvalidOperationException("NapCat 尚未建立连接。");
@@ -323,8 +337,8 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
             MessageTime = root.TryGetProperty("time", out var time) && time.ValueKind != JsonValueKind.Null
                 ? ReadMessageInteger(time)
                 : null,
-            GroupId = ReadMessageInteger(root.GetProperty("group_id")),
-            SenderId = ReadMessageInteger(root.GetProperty("user_id")),
+            GroupId = root.TryGetProperty("group_id", out var groupId) ? ReadMessageInteger(groupId) : 0,
+            SenderId = root.TryGetProperty("user_id", out var userId) ? ReadMessageInteger(userId) : 0,
             SenderNickname = sender.ValueKind == JsonValueKind.Object && sender.TryGetProperty("nickname", out var nickname)
                 ? nickname.GetString() ?? ""
                 : "",
@@ -394,6 +408,10 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
                 break;
             case "json":
                 message.MessageContentList.Add(ParseJsonCard(data));
+                break;
+            case "forward":
+                // 合并转发内容需在处理阶段调 get_forward_msg 展开，这里只保留资源 ID。
+                message.MessageContentList.Add(new ForwardContent { ResourceId = data.GetProperty("id").ToString() });
                 break;
             case "image":
                 message.MessageContentList.Add(new ImageContent

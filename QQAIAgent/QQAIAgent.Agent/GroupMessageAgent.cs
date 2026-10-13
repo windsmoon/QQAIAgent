@@ -75,7 +75,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     private async Task<(long? MessageId, string Status, string ErrorType)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
     {
         // 消息接收端已筛选出需要处理的消息，并移除了触发标记。
-        // 按原顺序转换文本和图片，不跨图片拼接或裁剪文本段。
+        // 先展开正文里的合并转发，再按原顺序转换文本和图片。
+        await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken);
         var chatContentList = new List<ChatContent>();
         AppendChatContents(chatContentList, message.MessageContentList, isReference: false);
         // 消息列表只属于本次请求，不与其他用户或后续请求共享上下文。
@@ -228,6 +229,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                         });
                     }
                     break;
+                case ForwardContent:
+                    // 超出展开深度上限（或关闭展开）而保留的转发，降级为省略标记。
+                    chatContentList.Add(new ChatTextContent { Text = "[更深层转发内容已省略]" });
+                    break;
                 default:
                     // 沿用其他消息段的处理规则：引用保留文字标记，当前正文跳过。
                     if (isReference)
@@ -241,6 +246,51 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     }
                     break;
             }
+        }
+    }
+
+    // 展开列表中的合并转发：节点拼回为标签文本加原消息段，图片等内容保持原类型继续走常规转换。
+    private async Task TryExpandForwardsAsync(List<MessageContent> contents, int depth, CancellationToken cancellationToken)
+    {
+        if (depth > config.MaxForwardDepth)
+        {
+            return;
+        }
+
+        for (var i = 0; i < contents.Count; i++)
+        {
+            if (contents[i] is not ForwardContent forward)
+            {
+                continue;
+            }
+
+            var expanded = new List<MessageContent>();
+            try
+            {
+                var nodes = await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken);
+                var limitedMessageList = nodes.Take(config.MaxForwardMessagesPerLayer).ToList();
+                expanded.Add(new TextContent
+                {
+                    Text = $"[合并转发消息，共 {nodes.Count} 条{(limitedMessageList.Count < nodes.Count ? $"，仅展开前 {limitedMessageList.Count} 条" : "")}]\n"
+                });
+                foreach (var node in limitedMessageList)
+                {
+                    var name = node.SenderCard != "" ? node.SenderCard : node.SenderNickname;
+                    expanded.Add(new TextContent { Text = $"{name}({node.SenderId})：" });
+                    expanded.AddRange(node.MessageContentList);
+                }
+            }
+            catch (Exception) when (cancellationToken.IsCancellationRequested == false)
+            {
+                // 获取失败不中断整个请求，降级为文字标记。
+                expanded.Add(new TextContent { Text = "[合并转发消息，获取失败]" });
+            }
+
+            await TryExpandForwardsAsync(expanded, depth + 1, cancellationToken);
+            // 删除这个 forward 数据，改用展开后的数据
+            contents.RemoveAt(i);
+            contents.InsertRange(i, expanded);
+            i += expanded.Count - 1; //让循环跳过刚才插入的内容，防止重复处理
         }
     }
 
@@ -264,6 +314,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 // logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);
             }
 
+            // 引用消息里同样可能包含合并转发，取回后先展开再转换。
+            await TryExpandForwardsAsync(refMessage.MessageContentList, 0, cancellationToken);
             // 引用说明作为独立文本段放在正文之前，图片保留在原位置。
             var contentList = new List<ChatContent>();
             contentList.Add(new ChatTextContent

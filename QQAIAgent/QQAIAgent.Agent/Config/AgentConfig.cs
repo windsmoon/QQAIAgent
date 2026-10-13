@@ -15,7 +15,11 @@ public class AgentConfig
     /// <summary>每条 QQ 用户请求从接收到正常回复的总超时秒数，包含排队、引用读取、所有模型调用和工具执行。</summary>
     public int QQRequestTimeoutSeconds { get; set; } = 300;
     /// <summary>允许展开的最大引用层数，不包含当前消息；0 表示不读取引用。</summary>
-    public int MaxReferenceDepth { get; set; } = 3;
+    public int MaxReferenceDepth { get; set; } = 5;
+    /// <summary>合并转发展开的最大嵌套层数；0 表示不展开。</summary>
+    public int MaxForwardDepth { get; set; } = 5;
+    /// <summary>单层合并转发最多展开的消息条数，超出部分截断。</summary>
+    public int MaxForwardMessagesPerLayer { get; set; } = 20;
     /// <summary>启动时从 Markdown 文件加载的系统提示词；空白时不发送系统消息。</summary>
     [JsonIgnore]
     public string SystemPrompt { get; set; } = string.Empty;
