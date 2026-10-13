@@ -4,12 +4,12 @@ using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Agent.Statistics;
-using QQAIAgent.Agent;
 using QQAIAgent.DeepSeek;
 using QQAIAgent.Host;
 using QQAIAgent.Host.Logging;
 using QQAIAgent.Host.Plugin;
 using QQAIAgent.Infrastructure.Database;
+using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
@@ -29,6 +29,7 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
+builder.Services.AddSingleton<ImageFileStore>();
 
 var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
 builder.Services.AddSingleton(new GroupMessageStore(messagesDirectoryPath));
@@ -68,5 +69,6 @@ builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
 await host.Services.GetRequiredService<RequestStatistics>().InitializeAsync(CancellationToken.None);
+await host.Services.GetRequiredService<ImageFileStore>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<GroupMessageStore>().InitializeAsync(agentConfig.AllowedGroups, CancellationToken.None);
 host.Run();

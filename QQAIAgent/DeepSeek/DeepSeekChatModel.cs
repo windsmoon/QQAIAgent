@@ -6,13 +6,16 @@ using QQAIAgent.DeepSeek.Config;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
+using QQAIAgent.Infrastructure.Image;
 
 namespace QQAIAgent.DeepSeek;
 
 public sealed class DeepSeekChatModel : IChatModel, IDisposable
 {
     #region fields
+    private const string StorageSource = "DeepSeek";
     private readonly HttpClient _httpClient;
+    private readonly ImageFileStore _imageFilStore;
     private readonly string _apiKey;
     private readonly string _model;
     private readonly Uri _endpoint;
@@ -25,8 +28,9 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #endregion
 
     #region methods
-    public DeepSeekChatModel()
+    public DeepSeekChatModel(ImageFileStore imageFilStore)
     {
+        _imageFilStore = imageFilStore;
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
@@ -67,7 +71,6 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         }
 
         var messages = new List<object>(request.Messages.Count);
-        // 只在本次调用内按来源地址复用上传结果；后续工具轮次通过图片段中的 FileId 复用。
         var uploadedFiles = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var message in request.Messages)
         {
@@ -106,10 +109,14 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                             {
                                 if (uploadedFiles.TryGetValue(imageContent.Url, out var fileId) == false)
                                 {
-                                    fileId = await UploadImageAsync(imageContent.Url, cancellationToken);
+                                    fileId = await _imageFilStore.FindValidFileIdAsync(StorageSource, imageContent.Url, cancellationToken);
+                                    if (string.IsNullOrEmpty(fileId))
+                                    {
+                                        fileId = await UploadImageAsync(imageContent.Url, cancellationToken);
+                                        Task.Run(() => _imageFilStore.RecordAsync(StorageSource, imageContent.Url, fileId, TimeSpan.FromDays(29), CancellationToken.None));
+                                    }
                                 }
 
-                                // 上传成功后写回原内容段，同一请求的后续模型调用不再下载或上传。
                                 imageContent.FileId = fileId;
                             }
 
