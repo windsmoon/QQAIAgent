@@ -1,7 +1,10 @@
 {
   "AllowedGroups": [],
+  "BlacklistedGroups": [],
   "IsTestMode": false,
   "MaxModelCalls": 20,
   "QQRequestTimeoutSeconds": 300,
-  "MaxReferenceDepth": 3
+  "MaxReferenceDepth": 5,
+  "MaxForwardDepth": 5,
+  "MaxForwardMessagesPerLayer": 20
 }

@@ -1,185 +1,213 @@
 # QQAIAgent
 
-基于 NapCat 的 QQ AI Agent，使用 C# 和 .NET 10 开发，目标运行环境为 Windows / Windows Server。设计目标是低内存占用、高度可配置和可扩展。
+基于 NapCat 的 QQ 群 AI Agent，使用 C# 和 .NET 10 开发，面向 Windows / Windows Server，支持文本与图片输入、多轮工具调用、引用消息和合并转发。
 
-## 当前功能
+## 安装与部署
 
-通过 NapCat 的正向 WebSocket 接收群消息，并核验登录的机器人账号。白名单群消息中，普通模式下第一个非空白文本段去掉前导空白后以 `123` 开头，或艾特机器人时，整条消息会进入处理队列；测试模式下只接受第一个非空白文本段去掉前导空白后以 `321` 开头的消息，单独艾特机器人不会触发。前面的艾特、图片等非文本段以及空白文本段不参与前缀判断，引用任何人的消息都适用。
+1. 安装并登录 NapCat，开启正向 WebSocket 服务，记下地址、访问令牌和机器人 QQ 号。
+2. 从源码运行时安装 .NET 10 SDK，用 Rider 打开 `QQAIAgent/QQAIAgent.sln`。部署依赖框架的发布版本时，服务器需安装 .NET 10 运行时。
+3. 按下节说明，将 `QQAIAgent/Config/` 中的 example 文件复制为 local 文件并填写配置。
+4. 本地运行 `QQAIAgent.Host`；服务器部署该项目的完整发布输出，再在程序目录运行 `QQAIAgent.Host.exe`。构建与发布会复制配置和内置工具插件，部署时保留 `Config/`、`Plugins/`、`appsettings.json` 及全部运行依赖。
 
-消息带有引用时，Agent 在处理阶段通过 NapCat 逐层获取被引用的群消息，按较早引用到当前请求的顺序交给模型。引用中的触发前缀不参与指令匹配，也不去掉引用中的前缀；引用链最多展开 `MaxReferenceDepth` 层，默认 3 层。当前模型接收文本，引用中的艾特转为文本，图片及尚未支持的消息段保留类型标记。获取引用失败时回复“获取引用消息失败，请稍后再试”，不继续请求模型。
+启动后会连接 NapCat 并核验机器人账号。普通模式在允许的群内发送 `123 你好`，测试模式发送 `321 你好`。业务配置固定从程序目录的 `Config/` 读取，不依赖启动时的工作目录。
 
-`GroupMessageAgent` 去掉触发前缀，将配置的系统提示词放在消息列表最前面，再将当前问题作为一条用户消息传给 `IChatModel`。模型请求工具调用时，Agent 执行全部工具，将模型的完整工具调用消息和对应结果加入本次消息列表，再次请求模型，直到模型返回最终文本，发送到原群。系统提示词在本次请求的所有模型轮次中保留。调用工具时的中间文本不发送到 QQ。只有前缀或后接空白时，去掉前缀后的空字符串也会交给模型处理；模型结束调用而没有返回可用文本时，回复“回复内容为空”。
+## 需要配置哪些文件
 
-模型请求超时时，回复“模型请求超时，请稍后再试”；其他模型请求失败时，回复“模型请求失败，请稍后再试”。异常仍由宿主记录日志，后续消息继续处理。宿主退出导致的取消不发送失败提示。
+example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 local 文件，修改 example 不会直接改变正在运行的程序。本地 JSON 配置和系统提示词由 Git 忽略。
 
-每条 QQ 用户请求受 `QQRequestTimeoutSeconds` 总时限控制，默认 300 秒（5 分钟）。从收到请求到正常回复共用一个时限，总时限到达后取消当前处理，回复“请求处理超时，请稍后再试”，请求统计状态记为 `timeout`，后续消息继续处理。
-
-调用日志记录每轮模型请求的开始、结束原因、工具调用数、回复字符数和耗时，以及每个工具的开始、完成、结果字符数和耗时。模型失败、工具失败、超时或跳过、空回复和次数上限使用 Warning 日志，请求取消使用 Information 日志。日志作用域携带群号、发送者、模型轮次及工具名称、调用 ID，便于追踪完整请求。控制台时间戳和作用域显示由 `QQAIAgent.Host/appsettings.json` 中的 `Logging.Console.FormatterOptions` 配置。
-
-进入 Agent 处理的用户请求会写入 SQLite 统计库，通过请求 ID 关联 `requests`、`model_calls` 和 `tool_calls`。记录机器人 QQ、群号、用户 QQ、模型调用轮次、思考强度、工具名称、时间、耗时、状态、结束原因和异常类型；发送确认后记录回复消息 ID。每轮模型调用还记录接口返回的输入、输出、总 Token、输入缓存命中和未命中 Token，以及可选的思考 Token；思考 Token 属于输出 Token，不重复计入总量。DeepSeek 字段语义见[官方用量说明](https://api-docs.deepseek.com/api/create-chat-completion/)。接口未返回的用量字段保留 `NULL`，实际为零时保存 `0`。统计库不保存用户消息、模型回复、思考正文、工具参数、工具结果或异常正文。工具调用次数包含实际开始执行后成功、失败、超时或取消的调用，未启用、未加载和达到模型轮次上限后未执行的工具不计入次数。
-
-数据库路径由 `QQAIAgent.Host/appsettings.json` 中的 `Database.Path` 配置，默认是程序目录下的 `Data/qqaiaagent.sqlite3`。Host 在连接 NapCat 前创建目录、包含 Token 字段的表和统计视图，并启用 WAL。`request_statistics` 提供每个请求的模型和工具调用次数，以及各轮已知 Token 用量之和；没有已知用量时汇总为 `NULL`，存在未返回用量的轮次时汇总只包含已知部分。`tool_usage` 按机器人 QQ、群号、用户 QQ 和工具名称汇总使用次数及状态。历史统计不作为后续请求的模型上下文；参考库中的旧数据不自动导入。
-
-群消息由基础设施中的 `GroupMessageStore` 单独记录，只保存 `AllowedGroups` 内的群，每个群对应一个 `Data/Messages/<群号>.sqlite3` 文件，目录可通过 `Database.MessagesDirectory` 配置。Host 在连接 NapCat 前为允许的群创建 `messages` 表及消息 ID、发送时间索引。`OnGroupMessageReceived` 在确认群号允许后触发记录任务，业务处理不等待记录完成，记录失败单独写入日志；机器人自身上报、未触发指令、不支持的内容及后续处理失败的消息也会保留。记录消息 ID、发送时间（Unix 秒）、发送者 QQ、昵称、群名片、子类型、完整消息正文 JSON 和引用消息 ID；数组消息和 CQ 字符串都保留原值，包括触发前缀、艾特及未知消息段，重复上报逐次插入。不记录私聊、接收账号、程序接收时间或完整原始报文。
-
-- 所有群共用一个容量为 100 的消息队列，按顺序完成每条消息的模型与工具调用和 QQ 回复。
-- 模型实例作为单例复用，每条 QQ 请求单独维护消息列表，包含当前问题和本次调用的模型、工具消息，请求结束后不保存历史上下文。
-- DeepSeek 在自己的项目中读取配置，并维护一个复用的 `HttpClient`。
-- DeepSeek 工具调用、插件工具执行器和 Agent 循环（agent loop）已接入群消息入口，支持一次 QQ 请求内多轮调用模型和工具后回复。
-
-## 目录结构
-
-```text
-QQAIAgent/
-├── QQAIAgent/
-│   ├── QQAIAgent.sln
-│   ├── Config/                # 各模块的 JSON 配置与模板
-│   ├── QQAIAgent.Host/        # 程序入口、依赖注入与消息队列
-│   ├── QQAIAgent.Agent/       # 群消息处理与模型接口
-│   ├── QQAIAgent.Abstractions/ # 插件与宿主共享的扩展接口
-│   ├── QQAIAgent.Infrastructure/ # 可由工具和 QQ 指令复用的基础功能
-│   ├── QQAIAgent.Tools/       # 通过 DLL 加载的内置工具插件
-│   ├── QQAIAgent.Messaging/   # 群消息数据与发送接口
-│   ├── QQAIAgent.NapCat/      # NapCat 协议适配
-│   └── DeepSeek/             # 独立的大模型实现
-├── Third/                    # 第三方程序的本地存放目录
-├── LICENSE
-└── README.md
-```
-
-Host 直接引用 DeepSeek 项目，并通过依赖注入将 `DeepSeekChatModel` 注册为 `IChatModel` 单例。`GroupMessageAgent` 通过构造函数获取模型并处理消息。DeepSeek 在自己的项目中读取配置和处理 HTTP 通信。
-
-## 业务配置
-
-业务 JSON 和系统提示词 Markdown 文件统一放在 `QQAIAgent/Config/`，与解决方案中的各项目文件夹同级。将 JSON 模板复制为对应的 `*.local.json`，将 `system-prompt.example.md` 复制为 `system-prompt.local.md`，再填写实际配置；本地配置和本地系统提示词由 Git 忽略。
-
-| 模板 | 本地配置 | 内容 | 读取方 |
-| --- | --- | --- | --- |
-| `napcat.example.json` | `napcat.local.json` | WebSocket 地址、访问令牌、机器人 QQ 账号、启动及接口调用和断开连接的超时秒数 | Host |
-| `agent.example.json` | `agent.local.json` | 群白名单、测试模式、每条请求的模型调用次数上限、总超时秒数 | Host |
-| `system-prompt.example.md` | `system-prompt.local.md` | 系统提示词正文 | Host |
-| `deepseek.example.json` | `deepseek.local.json` | API Key、模型名称、完整请求地址、超时秒数 | DeepSeek 模型 |
-| `tools.example.json` | `tools.local.json` | 工具定义、启用状态及各工具的超时秒数 | Host |
-| `websearch.example.json` | `websearch.local.json` | 联网搜索 API Key、完整请求地址 | 联网搜索工具 |
-
-`napcat.local.json` 的三个超时字段以秒为单位，填写正数；省略时使用下表默认值。Host 在启动时读取配置，修改后需将配置复制到宿主目录并重启。
-
-| 字段 | 默认值 | 范围 |
+| example 文件 | 复制后的文件 | 必填或需要确认的内容 |
 | --- | --- | --- |
-| `StartupTimeoutSeconds` | 30 | 启动时连接 WebSocket 与账号核验共用一个总时限 |
-| `ApiTimeoutSeconds` | 30 | 每次 NapCat 接口调用，包括等待接口锁、发送请求和接收响应；读取引用与发送回复均适用 |
-| `DisconnectTimeoutSeconds` | 5 | 断开连接时等待接口锁、关闭握手和等待接收循环结束共用一个时限 |
+| [napcat.example.json](QQAIAgent/Config/napcat.example.json) | `napcat.local.json` | `WebSocketUrl`、`BotAccount`；`AccessToken` 与 NapCat 的设置一致 |
+| [agent.example.json](QQAIAgent/Config/agent.example.json) | `agent.local.json` | 填写 `AllowedGroups`，确认 `IsTestMode`；其余限制可先沿用模板 |
+| [deepseek.example.json](QQAIAgent/Config/deepseek.example.json) | `deepseek.local.json` | 填写 `ApiKey`，确认模型 `Model`、完整请求地址 `Endpoint` 和超时 |
+| [tools.example.json](QQAIAgent/Config/tools.example.json) | `tools.local.json` | 按需设置 `Enabled` 和 `TimeoutSeconds`；保留工具名称和参数定义 |
+| [system-prompt.example.md](QQAIAgent/Config/system-prompt.example.md) | `system-prompt.local.md` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
+| [websearch.example.json](QQAIAgent/Config/websearch.example.json) | `websearch.local.json` | 启用 `web_search` 时填写服务 `ApiKey`，确认 `Endpoint`；未使用搜索时不读取此文件 |
 
-启动账号核验同时受启动总时限与单次接口时限控制；QQ 请求中的 NapCat 接口调用同时受接口时限与 `QQRequestTimeoutSeconds` 控制，先到达的时限触发取消。
+前五个 local 文件需要准备。模板默认启用获取时间和调整思考强度，关闭联网搜索与网页读取；启用搜索时再准备联网搜索配置。
 
-`websearch.local.json` 使用腾讯云联网搜索的服务 API KEY 接入方式，`ApiKey` 填写联网搜索服务密钥，`Endpoint` 填写完整请求地址，模板为 `https://api.wsa.cloud.tencent.com/SearchPro`。密钥获取与接口说明见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。配置在每次调用联网搜索时读取，未调用搜索时不读取该文件。
+### Agent 配置
 
-`tools.local.json` 是工具配置数组，每个元素对应 `ChatToolDefinition`。Host 在启动时读取配置，将 `Enabled` 为 `true` 的工具定义列表注册为 `IReadOnlyList<ChatToolDefinition>`，供依赖注入获取。`Enabled` 省略时默认为 `true`。当前模板中获取时间（`get_time`）、联网搜索（`web_search`）和获取网页（`fetch_web_page`）均开启。`ParametersJson` 保存工具参数的 JSON Schema 字符串。工具定义的 `Name` 与插件实现的 `ITool.Name` 对应；开关控制开放给模型的工具定义，不影响插件加载，也不限制 QQ 指令直接使用基础功能。
-
-每个工具对象的 `TimeoutSeconds` 控制该工具单次调用的超时秒数，填写正数，省略时默认为 30。当前配置中 `get_time` 为 5 秒、`web_search` 为 30 秒、`fetch_web_page` 为 60 秒。每次调用按对应工具的配置独立计时；超时后返回带原调用 ID 的工具失败消息，继续执行本轮剩余工具，再将结果交给模型处理。整个请求被取消时，仍然向上传递取消异常。该配置由工具执行器使用，不会发送给模型。
-
-构建和发布 Host 时，配置文件会复制到宿主程序目录的 `Config/`。运行时以 `AppContext.BaseDirectory` 定位文件，不依赖启动时的工作目录。DeepSeek 在模型实例创建时读取自己的配置，配置对象不注册到 Host 的依赖注入容器中。
-
-`agent.local.json` 示例：
+`agent.local.json` 示例，群号需替换为实际允许的群号：
 
 ```json
 {
   "AllowedGroups": [123456789],
+  "BlacklistedGroups": [],
   "IsTestMode": false,
-  "MaxModelCalls": 10,
+  "MaxModelCalls": 20,
   "QQRequestTimeoutSeconds": 300,
-  "MaxReferenceDepth": 3
+  "MaxReferenceDepth": 5,
+  "MaxForwardDepth": 5,
+  "MaxForwardMessagesPerLayer": 20
 }
 ```
 
-`AllowedGroups` 填写允许处理的真实群号，空列表表示不处理任何群。`IsTestMode` 默认为 `false`：普通模式保留 `123` 前缀或艾特机器人触发；设为 `true` 后只接受以 `321` 开头的文本，`123` 和单独艾特均不会触发，切换配置后需重新构建或复制到宿主目录并重启。`MaxModelCalls` 控制每条 QQ 请求最多调用模型的次数，省略时默认为 20，首次请求和生成最终回复的请求都计入。最后一次模型调用若仍请求工具，Agent 不再执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
+| 字段 | 默认值 | 作用 |
+| --- | --- | --- |
+| `AllowedGroups` | `[]` | 允许记录和处理的群；空列表不处理任何群 |
+| `BlacklistedGroups` | `[]` | 在允许列表中的黑名单群只记录消息，不触发模型 |
+| `IsTestMode` | `false` | 普通模式使用 `123` 或 @ 机器人触发；测试模式仅接受 `321` 前缀 |
+| `MaxModelCalls` | `20` | 单条请求的模型调用总次数，包含首次请求和最终回复请求 |
+| `QQRequestTimeoutSeconds` | `300` | 从接收消息到正常回复的总时限，包含排队、引用、转发、图片处理、模型和工具调用 |
+| `MaxReferenceDepth` | `5` | 最大引用层数，直接引用计为第 1 层；`0` 不读取引用 |
+| `MaxForwardDepth` | `5` | 合并转发的展开深度限制，计数边界见下文 |
+| `MaxForwardMessagesPerLayer` | `20` | 每个合并转发取前多少条节点消息；超出时给出截断说明 |
 
-`MaxReferenceDepth` 控制最多读取的引用层数，省略时默认为 3。直接引用计为第 1 层，不包含当前消息；设为 0 时不读取引用。达到上限或引用链结束后，使用已读取的引用上下文处理当前请求。
+超时字段和模型调用次数填写正数。达到最后一次模型调用且模型仍要求工具时，不执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
 
-`QQRequestTimeoutSeconds` 控制单条 QQ 用户请求从接收到正常回复的总超时秒数，填写正数，省略时默认为 300。计时从 Host 收到请求起，覆盖排队、引用读取、所有模型轮次、工具调用和正常回复；进入下一轮不会重新计时。排队耗尽时限的请求在出队后直接回复超时提示，不再读取引用或调用模型、工具。DeepSeek 的 `TimeoutSeconds` 和各工具的 `TimeoutSeconds` 仍控制各自单次调用，与总时限共同生效，先到达的时限触发取消。超时提示发送和结束统计在处理取消后完成。修改配置后需将配置复制到宿主目录并重启。
+### NapCat 与模型配置
 
-Host 在启动时固定读取宿主目录下的 `Config/system-prompt.local.md`，将文件全文作为系统消息，不渲染 Markdown；文件内容为空白时不发送系统消息，文件缺失或不可读取时启动会失败。模板中的默认提示词要求简体中文纯文本、自然直接、不使用 Markdown，通常用 1～3 句话并尽量控制在 150 字以内；搜索和网页内容只提炼关键信息，来源链接直接使用 URL。用户明确要求详细说明时可适当展开。格式和篇幅由提示词引导模型生成，程序不会按字数截断或删除 Markdown。修改提示词文件后需同步到宿主目录并重新启动。
+`napcat.local.json` 的 `WebSocketUrl` 填写正向 WebSocket 地址，`BotAccount` 填写实际登录账号；启动时会通过 `get_login_info` 核验，账号不一致会导致启动失败。
 
-## 本地运行
+| 配置文件 | 超时字段 | 省略时的默认值 | 当前 example 值 |
+| --- | --- | --- | --- |
+| `napcat.local.json` | `StartupTimeoutSeconds` | 30 秒 | 30 秒 |
+| `napcat.local.json` | `ApiTimeoutSeconds` | 30 秒 | 30 秒 |
+| `napcat.local.json` | `DisconnectTimeoutSeconds` | 5 秒 | 5 秒 |
+| `deepseek.local.json` | `TimeoutSeconds` | 60 秒 | 120 秒 |
 
-1. 准备 .NET 10 SDK，并在 NapCat 中配置正向 WebSocket 服务。
-2. 在 Rider 中打开 `QQAIAgent/QQAIAgent.sln`，复制并填写本地配置。`napcat.local.json` 的地址、令牌和机器人账号应与 NapCat 配置对应。
-3. 在 `agent.local.json` 中填写群白名单、模型调用次数上限和总超时秒数 `QQRequestTimeoutSeconds`（默认 300 秒），在 `tools.local.json` 中为每个工具填写 `TimeoutSeconds`，在 `deepseek.local.json` 中填写 API Key、模型名称、请求地址和超时秒数。使用联网搜索时，在 `websearch.local.json` 中填写腾讯云联网搜索服务 API Key 和完整请求地址；不使用时将 `web_search` 的 `Enabled` 设为 `false`。
-4. 在 Rider 中运行 `QQAIAgent.Host`，保留运行前的 Build 步骤。Host 的项目引用会自动构建 DeepSeek 和内置工具插件；模型程序集复制到宿主输出目录，工具插件及其依赖复制到 `Plugins/QQAIAgent.Tools/`。
-5. 在白名单群中发送 `123 你好` 测试文本回复，或发送 `123 请用 get_time 获取当前时间` 测试工具调用。模型请求获取时间时，Agent 执行 `GetTimeTool`，将结果交回模型生成最终回答，再回复该群。
+NapCat 启动超时覆盖连接与账号核验；接口超时覆盖等待接口锁、发送与接收响应；断开超时覆盖关闭连接的过程。
 
-修改源目录中的 JSON 或系统提示词 Markdown 文件后，需要将更新后的文件复制到宿主程序目录的 `Config/`；重新构建 Host 会按项目配置执行复制。NapCat、Agent、系统提示词和工具定义配置在启动时读取，DeepSeek 配置在模型实例创建时读取，更新后需要重新启动宿主才能生效。联网搜索配置在每次调用时读取，更新宿主目录中的该文件后，下次搜索即可生效。
+当前模型适配器为 `DeepSeekChatModel`，example 使用 `deepseek-flash` 和 `https://api.deepseek.com/chat/completions`。`Endpoint` 必须是完整 HTTPS 地址，API Key 和模型名称不能为空。模型配置在实例创建时读取，模型和内部 `HttpClient` 作为单例复用。
 
-## 工具插件
+DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的下载与上传。图片下载和上传共用一次时限，多张图片准备与聊天请求仍受 QQ 请求总时限约束。
 
-`QQAIAgent.Abstractions` 定义 `ITool` 接口。插件通过 `Name` 标识工具，`ExecuteAsync(string argumentsJson, CancellationToken cancellationToken)` 接收参数 JSON，返回文本或 JSON 字符串。`QQAIAgent.Tools` 是内置插件项目，当前包含 `GetTimeTool`、`WebSearchTool` 和 `FetchWebPageTool`。`get_time` 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移。
+### 工具与系统提示词
 
-`web_search` 接收 `{"query":"搜索关键词或问题"}`，通过腾讯云 `SearchPro` 接口搜索公开网页。请求使用 `Authorization: Bearer API_KEY` 和 JSON 字段 `Query`。结果为包含 `query`、`results`、`requestId` 和 `message` 的 JSON，其中 `results` 将接口的 `Pages` JSON 字符串数组解码为对象数组，保留标题、摘要、来源地址、发布时间等原始字段；无结果时返回空数组，`message` 保留服务提示，未提供时为 `null`。HTTP 失败和腾讯云 `Response.Error` 交给现有工具执行器返回失败结果。工具复用一个 `HttpClient`，由宿主退出时释放，超时和取消沿用工具执行器的配置。
+`tools.local.json` 是工具定义数组。每项包含 `Name`、`Description`、`ParametersJson`、`Enabled` 和 `TimeoutSeconds`。`ParametersJson` 是 JSON Schema 字符串，`Name` 必须对应已加载插件的 `ITool.Name`。省略 `Enabled` 时为 `true`，省略工具超时时为 30 秒。
 
-已有 `tools.local.json` 需将 `web_search` 的 `Enabled` 设为 `true`，并填写 `websearch.local.json`，重新启动 Host 后可在白名单群中发送 `123 请用 web_search 搜索今天的科技新闻`。
+| 工具 | 参数 | example 启用状态 | example 超时 | 功能 |
+| --- | --- | --- | --- | --- |
+| `get_time` | `{}` | 开启 | 5 秒 | 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移 |
+| `set_reasoning_effort` | `{"effort":"high"}` | 开启 | 5 秒 | 调整本条请求下一轮模型调用的思考强度 |
+| `web_search` | `{"query":"搜索关键词"}` | 关闭 | 30 秒 | 通过腾讯云 SearchPro 搜索，返回查询词、结果、请求 ID 和服务提示 |
+| `fetch_web_page` | `{"url":"https://example.com"}` | 关闭 | 60 秒 | 读取 HTML 或纯文本，返回最终地址、标题和正文 |
 
-`fetch_web_page` 接收 `{"url":"https://example.com"}`，支持 HTTP/HTTPS、自动重定向、压缩响应以及 HTML 和纯文本内容。结果为包含 `url`（重定向后的最终地址）、`title` 和 `content` 的 JSON。HTML 使用 HtmlAgilityPack 解析，优先提取 `main`，没有时提取 `body`，过滤脚本、样式、注释和显式隐藏的内容，并保留段落换行。响应头未声明编码时读取 HTML 的 meta 编码，支持 UTF-8、GBK、GB2312 等编码及 BOM。工具复用一个 `HttpClient`，由宿主退出时释放，网络请求使用工具执行器传入的取消令牌和超时配置。
+联网搜索使用服务 API KEY 的 Bearer 鉴权，example 已填写完整地址 `https://api.wsa.cloud.tencent.com/SearchPro`，仍需填写自己的密钥。接入方式见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。网页读取支持重定向、压缩响应及编码识别，提取静态正文，不执行 JavaScript；需要登录或浏览器渲染的网页可能无法获取。
 
-该工具获取服务器返回的静态正文，不执行 JavaScript；需要登录或浏览器渲染的内容可能无法获取。HTTP 失败和不支持的内容类型交由现有工具执行器返回失败结果。已有 `tools.local.json` 需将 `fetch_web_page` 的 `Enabled` 设为 `true`，保留其 `TimeoutSeconds` 配置，重新启动 Host 后可在群中发送 `123 请读取 https://example.com 并总结内容`。
+每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
-Host 启动时扫描 `AppContext.BaseDirectory/Plugins/` 的直接子目录。每个插件目录以入口程序集名称命名，例如 `Plugins/QQAIAgent.Tools/QQAIAgent.Tools.dll`。没有同名入口 DLL 的目录会跳过。依赖 DLL、`.deps.json`、`.pdb` 和其他运行资源保留在该目录及其子目录中，不作为插件入口重复扫描。
+系统提示词全文作为系统消息发送，不渲染 Markdown。模板要求简体中文、简短自然的纯文本回复，允许按需求展开；格式由提示词引导，程序不按字数截断或删除 Markdown。
 
-每个入口程序集使用独立的 `AssemblyLoadContext`，通过 `AssemblyDependencyResolver` 解析托管和本机依赖。`QQAIAgent.Abstractions` 始终复用宿主加载的程序集，确保接口类型一致。一个插件 DLL 可以包含多个工具类；加载器会发现其中所有公开、非抽象且不含未绑定泛型参数的 `ITool` 实现，并分别注册为单例。Agent 或其他入口可以通过构造函数注入 `IEnumerable<ITool>` 获取全部实现，工具实例由依赖注入容器创建和管理。工具名称在所有插件之间应保持唯一，每次调用的临时状态应保留在方法内部。
+### 配置更新何时生效
 
-开发期，Host 对内置插件的项目引用设置 `ReferenceOutputAssembly="false"`。该引用只建立构建依赖，Host 代码不能直接使用插件具体类。MSBuild 根据插件实际输出路径复制完整输出到宿主的插件目录，因此点运行时会自动构建并复制插件，Debug、Release 和目标框架随当前构建配置变化。发布 Host 时也会复制内置插件到发布目录。
+| 修改位置 | 生效方式 |
+| --- | --- |
+| 源目录 `QQAIAgent/Config/` | 将 local 文件同步到宿主的 `Config/`；构建或发布也会复制 |
+| 宿主中的 NapCat、Agent、工具定义、系统提示词、DeepSeek 配置 | 重启宿主 |
+| 宿主中的 `websearch.local.json` | 下次搜索读取，无需重启 |
+| `appsettings.json` 中的数据库和文件日志路径 | 重启宿主后使用新路径 |
 
-添加第三方插件的步骤：
+## 消息触发与内容处理
 
-1. 创建目标框架为 `net10.0` 的类库，引用 `QQAIAgent.Abstractions`，添加一个或多个公开的 `ITool` 实现。
-2. 在插件项目中设置 `<EnableDynamicLoading>true</EnableDynamicLoading>`。对接口项目的引用设置 `Private="false"` 和 `ExcludeAssets="runtime"`，接口程序集由 Host 提供。
-3. 将插件完整构建输出放到宿主的 `Plugins/程序集名称/`，在 `tools.local.json` 中按每个工具的名称填写定义、开关和超时秒数，然后重新启动 Host。
-4. 如果插件源码也在当前解决方案中，并希望运行 Host 时自动构建它，在 Host 中添加与内置插件相同的项目引用元数据：`ReferenceOutputAssembly="false"`、`Private="false"` 和 `OutputItemType="ToolPluginAssembly"`。现有复制任务会自动处理该插件输出。
+当前接收群消息事件及机器人自身群消息上报，支持消息段数组和 CQ 字符串；私聊不进入该处理入口。只有 `AllowedGroups` 中的群会记录消息；机器人自身消息和黑名单群消息记录后不进入业务队列。
 
-`Infrastructure` 中的基础功能使用普通 C# 参数和返回值，工具实现负责适配模型参数和结果，QQ 指令处理逻辑也可以直接调用基础功能。插件发现、注册、模型工具调用响应解析和 Agent 的 `ToolExecutor` 已接入，群消息入口通过 Agent 循环完成工具执行与模型后续调用。
+前缀判断按原顺序寻找**第一个非空白文本段**，跳过空字符串、纯空白文本以及前面的 @、图片等非文本段，再去掉该文本的前导空白。普通模式判断是否以 `123` 开头，测试模式判断 `321`；前缀后不要求空格，例如 `123你好` 也能触发。
 
-Host 将 `ToolExecutor` 注册为单例，执行器通过构造函数获取全部插件 `IEnumerable<ITool>`、启用的工具定义和 `RequestStatistics`。`ExecuteAsync(IReadOnlyList<ChatToolCall>, ToolContext, string requestId, string modelCallId, CancellationToken)` 按返回顺序逐个匹配工具名称，读取对应定义的 `TimeoutSeconds`，将参数 JSON 字符串直接交给对应的 `ITool.ExecuteAsync`，每次调用的结果整理为 `ChatRole.Tool` 消息，保留原调用 ID 到 `ToolCallId`。请求 ID 和模型调用 ID 只用于关联统计记录。执行器只允许配置中已启用的工具；未启用、未配置、未加载、执行失败或超时的调用会返回错误结果消息，后续工具调用继续处理。请求取消会向上传递。每次执行的结果列表保留在方法内部，不共享请求状态。
+| 当前消息 | 普通模式 | 测试模式 |
+| --- | --- | --- |
+| `123 你好` | 触发 | 不触发 |
+| `321 你好` | 不触发 | 触发 |
+| @ 机器人，再输入普通问题 | 触发 | 不触发 |
+| 引用他人图片，附带 @ 他人和空白文本段，再输入 `123 看看这张图` | 触发 | 不触发 |
+| 引用他人图片，附带 @ 他人和空白文本段，再输入 `321 看看这张图` | 不触发 | 触发 |
 
-执行器为每次工具调用创建关联请求取消和超时的令牌，并通过 `WaitAsync` 在取消时结束对工具任务的等待。插件应使用异步 API，并向内部操作传递收到的 `CancellationToken`；忽略令牌的任务可能在超时后继续运行，返回任务前的同步阻塞代码也无法由 `WaitAsync` 中断。
+只判断第一个非空白文本段，不继续搜索后续有效文本段中的前缀。@ 他人、@ 全体成员、引用内部的 @ 或前缀不会单独触发；普通模式单独 @ 机器人可以触发。合法请求入队前移除匹配到的前缀和当前正文中的机器人 @，其他正文内容保留。只发送前缀时，移除后为空的文本也会交给模型。
 
-`GroupMessageAgent` 通过构造函数获取执行器，在每轮工具调用时执行：
+| 消息类型 | 交给模型的内容 |
+| --- | --- |
+| 文本 | 正文文本，当前请求移除已匹配的触发前缀 |
+| 图片、商城表情 `mface` | 图片输入，保留在内容中的原顺序 |
+| @ 他人 / 全体成员 | `@QQ号` / `@全体成员` 文本 |
+| QQ 表情 `face` | `[表情:名称]`；未知名称使用 `[表情]` |
+| JSON 卡片 | 按已解析到的摘要、标题、描述和链接生成文字；没有可提取字段时显示通用卡片标记 |
+| 合并转发 `forward` | 展开为发送者标签和各节点正文，图片继续作为图片输入 |
+| 其他未支持类型 | 当前正文跳过；引用正文保留未支持类型的文字标记 |
+
+### 引用、转发与图片
+
+引用消息通过 NapCat `get_msg` 逐层读取。模型消息顺序为系统提示词、较早引用、较近引用、当前请求；每层引用带发送者 QQ 和上下文说明。引用中的前缀不匹配也不移除。达到 `MaxReferenceDepth` 后使用已获取的内容；获取引用失败时回复“获取引用消息失败，请稍后再试”，不再请求模型。
+
+合并转发通过 `get_forward_msg` 展开，节点标注群名片或昵称及发送者 QQ，并受深度与节点数限制。获取失败时以“合并转发消息，获取失败”的标记继续处理；更深层未展开内容使用省略标记。转发资源按 ID 缓存，命中后直接使用本地数据。
+
+当前转发深度的计数起点有差异：正文中的首层为 1，引用中的首层为 0。因此 `MaxForwardDepth = 0` 时，正文不展开转发，引用中的首层仍会展开；同一配置下引用中的转发可多展开一层。
+
+图片使用 NapCat 提供的 URL，由模型适配器流式下载并上传到与聊天接口同路径前缀的 `files` 接口，再使用 `file_id` 发送给模型。不落盘保存图片，也不生成整张图片的 Base64 字符串。上传请求设置 30 天过期，本地文件 ID 按 29 天有效期缓存；上传或读取图片失败会进入模型请求失败流程。此链路要求图片 URL 可访问，并且配置的服务支持所使用的文件输入协议。
+
+## 请求执行与运行数据
+
+所有群共用容量为 **50** 的待处理队列。消费者数量为允许群数量，至少保留 1 个消费者；多个消费者并行处理请求，同一群的消息也可能并发，回复顺序不保证与发送顺序相同。队列满时跳过当前请求并尝试回复“群消息队列已满，请稍后再试”。
+
+每条请求单独维护模型消息列表和 `ToolContext`，保留本次引用、正文、模型消息和工具结果，结束后不作为后续请求的历史上下文。模型请求工具时，按顺序执行本轮工具，将结果按调用 ID 回传并继续请求模型；工具调用期间的中间文本不发送到 QQ，只发送最终文本。当前回复会 @ 提问者，并在有消息 ID 时引用提问消息。
+
+单个工具失败、超时、未启用或未加载时，生成工具错误结果交给模型继续处理；整个请求取消时向上传递取消。插件应传递并响应 `CancellationToken`，忽略取消的任务可能在执行器结束等待后继续运行。
+
+| 情况 | 处理结果 |
+| --- | --- |
+| 请求总时限到达 | 取消处理，回复“请求处理超时，请稍后再试” |
+| 单次模型请求超时 | 回复“模型请求超时，请稍后再试” |
+| 其他模型请求失败 | 回复“模型请求失败，请稍后再试” |
+| 模型最终文本为空白 | 回复“回复内容为空” |
+| 模型调用次数耗尽 | 回复“已达到模型调用次数上限，请重新发起请求” |
+| 宿主退出 | 取消当前处理，不发送取消提示 |
+| NapCat 连接结束 | 停止宿主；当前没有自动重连流程 |
+
+排队已耗尽总时限的请求，出队后直接进入超时流程。总时限覆盖正常回复，超时提示使用宿主令牌发送，并受 NapCat 单次接口超时约束。
+
+### 日志、统计与缓存
+
+路径由宿主 [appsettings.json](QQAIAgent/QQAIAgent.Host/appsettings.json) 配置，相对路径以程序目录为基准，启动时自动创建所需目录和表。
+
+| 路径 | 配置项 | 保存内容 |
+| --- | --- | --- |
+| `Log/qqaiaagent.log` | `Logging.File.Path` | 追加式 UTF-8 文件日志，包含请求、模型轮次和工具作用域 |
+| `Data/qqaiaagent.sqlite3` | `Database.Path` | 请求、模型和工具统计，以及 `image_files` 图片文件 ID 缓存 |
+| `Data/Messages/<群号>.sqlite3` | `Database.MessagesDirectory` | 允许群的原始消息记录 |
+| `Data/Messages/forward.sqlite3` | `Database.MessagesDirectory` | `forward_messages` 合并转发响应缓存 |
+
+请求统计使用 `requests`、`model_calls`、`tool_calls` 关联机器人、群、用户、轮次、思考强度、时间、耗时、状态和回复消息 ID。实际开始执行的工具调用才计入次数，未启用、未加载及次数上限后未执行的工具不计入。统计表不保存用户或模型正文、工具参数、工具结果和异常正文。
+
+每轮记录接口返回的输入、输出、总 Token、缓存命中/未命中 Token 和可选思考 Token。未返回的字段保存为 `NULL`，零值保存为 `0`；总量使用接口返回值，不额外累加思考 Token。字段说明见 [DeepSeek 官方用量文档](https://api-docs.deepseek.com/api/create-chat-completion/)。`request_statistics` 汇总各轮已知用量和调用次数，`tool_usage` 按机器人、群、用户、工具汇总使用情况；存在未知轮次时，用量汇总只包含已知部分。
+
+统计库启用 WAL。回复发送成功后记录回复消息 ID，并在日志中输出本次请求的总输入、总输出 Token 和输入缓存命中率；输入缓存命中率使用命中输入 Token / 总输入 Token，缺少必要数据时显示未知。
+
+群消息记录与业务处理独立，保留发送时间、发送者信息、子类型、完整原始正文 JSON 和引用关系，包括未触发请求、机器人自身消息、允许列表内的黑名单群消息和未支持消息段。正文保留数组或 CQ 字符串原值，重复上报逐次插入；记录失败写入日志，不阻塞业务。记录与缓存不自动作为聊天历史上下文，也不导入旧版数据库。
+
+## 项目结构与插件扩展
+
+解决方案位于 `QQAIAgent/QQAIAgent.sln`，各项目职责如下：
+
+| 项目 / 目录 | 职责 |
+| --- | --- |
+| `QQAIAgent/Config` | 业务 JSON 配置模板与系统提示词 |
+| `QQAIAgent.Host` | 入口、依赖注入、消息队列、日志和插件加载 |
+| `QQAIAgent.Agent` | 模型接口、多轮请求处理、工具执行与统计 |
+| `QQAIAgent.Abstractions` | 插件契约、思考强度和请求工具上下文 |
+| `QQAIAgent.Infrastructure` | SQLite、群消息、转发及图片文件 ID 存储 |
+| `QQAIAgent.Messaging` | 群消息与内容类型、读取及发送接口 |
+| `QQAIAgent.NapCat` | NapCat WebSocket 与协议解析 |
+| `DeepSeek` | DeepSeek HTTP 模型适配 |
+| `QQAIAgent.Tools` | 四个内置工具的插件实现 |
+| `Third` | 第三方程序的本地存放目录 |
+
+Host 直接注册 `DeepSeekChatModel` 为 `IChatModel` 单例；工具通过插件目录加载。当前插件契约见 [ITool.cs](QQAIAgent/QQAIAgent.Abstractions/Tool/ITool.cs)：
 
 ```csharp
-var toolMessages = await toolExecutor.ExecuteAsync(response.Message.ToolCalls, toolContext, requestId, modelCallId, cancellationToken);
+string Name { get; }
+Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken);
 ```
 
-## 模型调用与部署
+工具接收模型返回的参数 JSON 和本条请求共享的上下文，返回可交给模型的文本或 JSON 字符串。基础设施功能通过普通 C# API 提供，工具负责适配模型参数与结果。
 
-当前固定使用 `DeepSeekChatModel`。模型单例由依赖注入容器创建和管理，宿主退出时释放模型及其内部的 `HttpClient`。每条 QQ 请求首次通过 `ChatRequest.Messages` 传入当前问题，后续模型调用携带本次请求中累积的模型与工具消息。
+添加插件时：
 
-`ChatRequest.Tools` 可以赋值。Agent 通过构造函数获取启用的工具定义，模型的 `SupportsToolCalling` 为 `true` 时才将其传入请求。DeepSeek 请求已支持工具定义、assistant 消息中的 `tool_calls` 和工具结果消息中的 `tool_call_id`，参数 Schema 会作为 JSON 对象发送；没有工具定义时省略 `tools` 字段。DeepSeek 的 `SupportsToolCalling` 已为 `true`，响应中的所有 `tool_calls` 会按顺序解析到 `ChatResponse.Message.ToolCalls`，保留调用 ID、工具名称和参数 JSON 字符串，工具调用消息的 `content` 可以为 `null`。参数字符串在响应解析时不会再次解析或改写，由工具执行阶段处理。
+1. 创建 `net10.0` 类库，实现公开、非抽象的 `ITool` 类型；工具名称保持唯一。
+2. 设置 `EnableDynamicLoading=true`，引用 `QQAIAgent.Abstractions` 时使用 `Private=false`、`ExcludeAssets=runtime`。
+3. 将完整插件输出放到宿主的 `Plugins/程序集名称/`，目录内保留同名入口 DLL、依赖和运行资源；在 `tools.local.json` 添加并启用对应定义，然后重启。
+4. 若需随 Host 构建与发布，在 Host 的项目引用中设置 `ReferenceOutputAssembly=false`、`Private=false` 和 `OutputItemType=ToolPluginAssembly`，沿用内置插件的复制流程。
 
-当前 QQ 请求会携带启用的工具定义。模型返回 `ChatFinishReason.ToolCalls` 时，群消息入口先保留完整的 assistant 消息，再调用 `ToolExecutor`，追加全部工具结果并继续请求模型；工具执行失败的结果也交给模型处理。模型结束工具调用后，仅发送最终文本到 QQ。循环受 `agent.local.json` 的 `MaxModelCalls` 限制，每一轮模型请求失败或超时都会发送对应失败提示。
-
-发布时部署 Host 的完整发布输出，包括引用的程序集、其他运行依赖和实际使用的配置。主要文件如下：
-
-```text
-程序目录/
-├── QQAIAgent.Host.exe
-├── DeepSeek.dll
-├── QQAIAgent.Agent.dll
-├── QQAIAgent.Abstractions.dll
-├── QQAIAgent.Infrastructure.dll
-├── QQAIAgent.Messaging.dll
-├── Plugins/
-│   └── QQAIAgent.Tools/
-│       ├── QQAIAgent.Tools.dll
-│       ├── QQAIAgent.Tools.deps.json
-│       └── QQAIAgent.Tools.pdb
-└── Config/
-    ├── napcat.local.json
-    ├── agent.local.json
-    ├── system-prompt.local.md
-    ├── deepseek.local.json
-    ├── tools.local.json
-    └── websearch.local.json
-```
-
-以上仅列出主要文件，宿主的其他运行依赖仍需随发布输出一起部署。
+Host 只扫描 `Plugins/` 的直接子目录，没有同名入口 DLL 的目录会跳过。每个插件使用独立 `AssemblyLoadContext` 解析依赖，共享宿主的契约程序集；工具作为单例注册，同一实例可能被多个请求并发调用，临时状态应放在方法内部或请求上下文中。
 
 ## 使用协议
 
