@@ -3,13 +3,14 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
 using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.NapCat;
 
-public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
+public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessageStore, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
 {
     #region fields
     private readonly ClientWebSocket _socket = new();
@@ -90,10 +91,19 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
 
     public async Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken)
     {
-        // 兼容 message_id 与 id 两种参数名，一并传入。
-        var data = await CallApiAsync("get_forward_msg", new { message_id = resId, id = resId }, cancellationToken);
+        // 合集内容不可变，先查本地缓存，未命中再调接口并落库。
+        var dataJson = await forwardMessageStore.TryGetAsync(resId, cancellationToken);
+        if (dataJson is null)
+        {
+            // 兼容 message_id 与 id 两种参数名，一并传入。
+            var data = await CallApiAsync("get_forward_msg", new { message_id = resId, id = resId }, cancellationToken);
+            dataJson = data.GetRawText();
+            Task.Run(() => forwardMessageStore.SaveAsync(resId, dataJson, cancellationToken));
+        }
+
+        using var document = JsonDocument.Parse(dataJson);
         var messages = new List<GroupMessage>();
-        if (data.TryGetProperty("messages", out var nodes) && nodes.ValueKind == JsonValueKind.Array)
+        if (document.RootElement.TryGetProperty("messages", out var nodes) && nodes.ValueKind == JsonValueKind.Array)
         {
             // 转发节点结构与群消息事件同构，直接按群消息解析。
             messages.AddRange(nodes.EnumerateArray().Select(ParseGroupMessage));

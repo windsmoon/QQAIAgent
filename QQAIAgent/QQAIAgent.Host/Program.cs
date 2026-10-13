@@ -33,6 +33,7 @@ builder.Services.AddSingleton<ImageFileStore>();
 
 var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
 builder.Services.AddSingleton(new GroupMessageStore(messagesDirectoryPath));
+builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
 var configDirectory = Path.Combine(AppContext.BaseDirectory, "Config");
 var napCatConfigPath = Path.Combine(configDirectory, "napcat.local.json");
@@ -71,4 +72,5 @@ var host = builder.Build();
 await host.Services.GetRequiredService<RequestStatistics>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<ImageFileStore>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<GroupMessageStore>().InitializeAsync(agentConfig.AllowedGroups, CancellationToken.None);
+await host.Services.GetRequiredService<ForwardMessageStore>().InitializeAsync(CancellationToken.None);
 host.Run();
