@@ -122,10 +122,10 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
             return;
         }
 
-        // 按原消息顺序取第一个文本段匹配指令，跳过前面的非文本段。
+        // 按原消息顺序取第一个非空白文本段匹配指令，跳过前面的非文本段和空白文本段。
         var textContent = message.MessageContentList
             .OfType<TextContent>()
-            .FirstOrDefault();
+            .FirstOrDefault(content => string.IsNullOrWhiteSpace(content.Text) == false);
         var text = textContent?.Text.TrimStart() ?? "";
         var commandPrefix = agentConfig.IsTestMode ? "321" : "123";
         var hasPrefix = text.StartsWith(commandPrefix, StringComparison.Ordinal);
