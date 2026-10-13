@@ -217,6 +217,17 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                         Text = faceContent.Name == "" ? "[表情]" : $"[表情:{faceContent.Name}]"
                     });
                     break;
+                case JsonCardContent jsonCardContent:
+                    {
+                        // 卡片转成文字标记：官方摘要与标题、描述拼接，跳转链接随后补充。
+                        var summary = string.Join(" - ", new[] { jsonCardContent.Prompt, jsonCardContent.Title, jsonCardContent.Description }.Where(part => part != ""));
+                        var url = jsonCardContent.Url != "" ? $"（链接：{jsonCardContent.Url}）" : "";
+                        chatContentList.Add(new ChatTextContent
+                        {
+                            Text = summary == "" ? $"[卡片消息]{url}" : $"[卡片:{summary}]{url}"
+                        });
+                    }
+                    break;
                 default:
                     // 沿用其他消息段的处理规则：引用保留文字标记，当前正文跳过。
                     if (isReference)

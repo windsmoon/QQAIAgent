@@ -392,6 +392,9 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
                     });
                 }
                 break;
+            case "json":
+                message.MessageContentList.Add(ParseJsonCard(data));
+                break;
             case "image":
                 message.MessageContentList.Add(new ImageContent
                 {
@@ -418,6 +421,56 @@ public class NapCatClient(NapCatConfig config, ILogger<NapCatClient> logger) : I
                 });
                 break;
         }
+    }
+
+    // json 卡段的 data 字段是再编码一层的 JSON 字符串，常见结构为 prompt 摘要加 meta 下首个子对象的 title/desc/qqdocurl。
+    private static JsonCardContent ParseJsonCard(JsonElement data)
+    {
+        var card = new JsonCardContent();
+        JsonElement root;
+        try
+        {
+            root = data.ValueKind == JsonValueKind.String
+                ? JsonSerializer.Deserialize<JsonElement>(data.GetString() ?? "")
+                : data;
+        }
+        catch (JsonException)
+        {
+            // 内层 JSON 无效时保留空卡片，由处理端降级显示。
+            return card;
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return card;
+        }
+
+        card.Prompt = ReadOptionalString(root, "prompt");
+        if (root.TryGetProperty("meta", out var meta) && meta.ValueKind == JsonValueKind.Object)
+        {
+            // 卡片类型不同，meta 下的子对象名也不同（detail_1/detail_2/news 等），取首个对象。
+            foreach (var detail in meta.EnumerateObject())
+            {
+                if (detail.Value.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                card.Title = ReadOptionalString(detail.Value, "title");
+                card.Description = ReadOptionalString(detail.Value, "desc");
+                card.Url = ReadOptionalString(detail.Value, "qqdocurl");
+                break;
+            }
+        }
+
+        return card;
+    }
+
+    private static string ReadOptionalString(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
     }
 
     private static void ParseCqMessage(string text, GroupMessage message)

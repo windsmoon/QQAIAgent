@@ -6,6 +6,7 @@ public enum MessageContentType
     Image,
     At,
     Face,
+    JsonCard,
     Video,
     Forward,
     Unknown
