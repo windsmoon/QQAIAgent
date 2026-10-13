@@ -23,8 +23,9 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | [tools.example.json](QQAIAgent/Config/tools.example.json) | `tools.local.json` | 按需设置 `Enabled` 和 `TimeoutSeconds`；保留工具名称和参数定义 |
 | [system-prompt.example.md](QQAIAgent/Config/system-prompt.example.md) | `system-prompt.local.md` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
 | [websearch.example.json](QQAIAgent/Config/websearch.example.json) | `websearch.local.json` | 启用 `web_search` 时填写服务 `ApiKey`，确认 `Endpoint`；未使用搜索时不读取此文件 |
+| [videounderstanding.example.json](QQAIAgent/Config/videounderstanding.example.json) | `videounderstanding.local.json` | 启用 `understand_video` 时填写百炼 `ApiKey`，确认 `Endpoint`、`Model`、`Fps`、`ReasoningEffort` 和 `MaxTokens`；未使用视频理解时不读取此文件 |
 
-前五个 local 文件需要准备。模板默认启用获取时间和调整思考强度，关闭联网搜索与网页读取；启用搜索时再准备联网搜索配置。
+前五个 local 文件需要准备。模板默认启用获取时间和调整思考强度，关闭联网搜索、网页读取与视频理解；启用搜索或视频理解时再准备对应配置。
 
 ### Agent 配置
 
@@ -83,8 +84,11 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | `set_reasoning_effort` | `{"effort":"high"}` | 开启 | 5 秒 | 调整本条请求下一轮模型调用的思考强度 |
 | `web_search` | `{"query":"搜索关键词"}` | 关闭 | 30 秒 | 通过腾讯云 SearchPro 搜索，返回查询词、结果、请求 ID 和服务提示 |
 | `fetch_web_page` | `{"url":"https://example.com"}` | 关闭 | 60 秒 | 读取 HTML 或纯文本，返回最终地址、标题和正文 |
+| `understand_video` | `{"url":"https://example.com/video.mp4","prompt":"总结视频中的关键事件"}` | 关闭 | 180 秒 | 通过阿里云百炼分析视频画面和声音，返回分析内容、模型、完成原因和 Token 用量 |
 
 联网搜索使用服务 API KEY 的 Bearer 鉴权，example 已填写完整地址 `https://api.wsa.cloud.tencent.com/SearchPro`，仍需填写自己的密钥。接入方式见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。网页读取支持重定向、压缩响应及编码识别，提取静态正文，不执行 JavaScript；需要登录或浏览器渲染的网页可能无法获取。
+
+视频理解使用百炼 OpenAI 兼容接口和 Bearer 鉴权，`Endpoint` 填完整的 `chat/completions` 地址，并使用对应地域的 API Key。默认模型为 `qwen3.8-omni-flash`，同时理解视频画面和声音，返回文本。`Fps` 为视频采样帧率，默认 `2`；`ReasoningEffort` 默认 `none`（关闭思考），可设为 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`；`MaxTokens` 限制单次输出，默认 `4096`。视频 URL 直接交给百炼处理，客户端不下载视频、不生成视频 Base64；必须提供百炼可直接访问的视频文件地址，普通视频网页链接不能作为输入。接入方式见[阿里云百炼官方文档](https://help.aliyun.com/zh/model-studio/qwen-omni)。这一阶段仅提供工具与配置，QQ 视频消息段尚未接入。
 
 每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
@@ -97,6 +101,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | 源目录 `QQAIAgent/Config/` | 将 local 文件同步到宿主的 `Config/`；构建或发布也会复制 |
 | 宿主中的 NapCat、Agent、工具定义、系统提示词、DeepSeek 配置 | 重启宿主 |
 | 宿主中的 `websearch.local.json` | 下次搜索读取，无需重启 |
+| 宿主中的 `videounderstanding.local.json` | 下次视频理解读取，无需重启 |
 | `appsettings.json` 中的数据库和文件日志路径 | 重启宿主后使用新路径 |
 
 ## 消息触发与内容处理
@@ -188,7 +193,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | `QQAIAgent.Messaging` | 群消息与内容类型、读取及发送接口 |
 | `QQAIAgent.NapCat` | NapCat WebSocket 与协议解析 |
 | `DeepSeek` | DeepSeek HTTP 模型适配 |
-| `QQAIAgent.Tools` | 四个内置工具的插件实现 |
+| `QQAIAgent.Tools` | 五个内置工具的插件实现 |
 | `Third` | 第三方程序的本地存放目录 |
 
 Host 直接注册 `DeepSeekChatModel` 为 `IChatModel` 单例；工具通过插件目录加载。当前插件契约见 [ITool.cs](QQAIAgent/QQAIAgent.Abstractions/Tool/ITool.cs)：

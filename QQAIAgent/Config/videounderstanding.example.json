@@ -1,0 +1,8 @@
+{
+  "ApiKey": "",
+  "Endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  "Model": "qwen3.8-omni-flash",
+  "Fps": 2,
+  "ReasoningEffort": "none",
+  "MaxTokens": 4096
+}

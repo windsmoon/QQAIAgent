@@ -26,5 +26,12 @@
     "Description": "获取 HTTP 或 HTTPS 网页的静态正文，返回最终地址、标题和正文。不执行 JavaScript。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"需要获取内容的网页地址\"}},\"required\":[\"url\"]}",
     "Enabled": false
+  },
+  {
+    "Name": "understand_video",
+    "TimeoutSeconds": 180,
+    "Description": "通过阿里云百炼 Qwen3.8-Omni-Flash 理解视频画面和声音，按问题描述内容、总结事件、识别语音或定位关键时间点。仅支持百炼可直接访问的 HTTP/HTTPS 视频文件地址，不支持网页链接。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"百炼可直接访问的视频文件 HTTP/HTTPS 地址\"},\"prompt\":{\"type\":\"string\",\"description\":\"需要对视频回答的问题或执行的分析要求\"}},\"required\":[\"url\",\"prompt\"],\"additionalProperties\":false}",
+    "Enabled": false
   }
 ]
