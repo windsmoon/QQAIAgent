@@ -75,7 +75,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     private async Task<(long? MessageId, string Status, string ErrorType)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
     {
         // 消息接收端已筛选出需要处理的消息，并移除了触发标记。
-        // 先展开正文里的合并转发，再按原顺序转换文本和图片。
+        // 先展开正文里的合并转发，再按原顺序转换文本、图片和视频。
         await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken);
         var chatContentList = new List<ChatContent>();
         AppendChatContents(chatContentList, message.MessageContentList, isReference: false);
@@ -204,6 +204,20 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     break;
                 case ImageContent imageContent:
                     chatContentList.Add(new ChatImageContent { Url = imageContent.Url });
+                    break;
+                case VideoContent videoContent:
+                    {
+                        // 主模型通过工具理解视频，保留来源提供的完整地址，避免改写带签名的 URL。
+                        var videoUrl = videoContent.Url != "" ? videoContent.Url : videoContent.File;
+                        var hasVideoUrl = Uri.TryCreate(videoUrl, UriKind.Absolute, out var videoUri) &&
+                            (videoUri.Scheme == Uri.UriSchemeHttp || videoUri.Scheme == Uri.UriSchemeHttps);
+                        chatContentList.Add(new ChatTextContent
+                        {
+                            Text = hasVideoUrl
+                                ? $"[视频]（地址：{videoUrl}；需要理解画面和声音时调用 understand_video 工具）"
+                                : "[视频：未提供 HTTP/HTTPS 视频地址，当前无法理解视频内容]"
+                        });
+                    }
                     break;
                 case AtContent atContent:
                     chatContentList.Add(new ChatTextContent

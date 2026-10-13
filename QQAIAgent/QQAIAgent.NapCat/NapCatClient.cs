@@ -437,6 +437,16 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
                         : 0
                 });
                 break;
+            case "video":
+                message.MessageContentList.Add(new VideoContent
+                {
+                    File = data.GetProperty("file").GetString() ?? "",
+                    Url = ReadOptionalString(data, "url"),
+                    FileSize = data.TryGetProperty("file_size", out var videoFileSize) && videoFileSize.ValueKind != JsonValueKind.Null
+                        ? ReadMessageInteger(videoFileSize)
+                        : 0
+                });
+                break;
             case "reply":
                 // 引用是上下文关系，不加入当前用户的正文消息段。
                 message.RefMessageId = ReadMessageInteger(data.GetProperty("id"));

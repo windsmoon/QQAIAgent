@@ -1,6 +1,6 @@
 # QQAIAgent
 
-基于 NapCat 的 QQ 群 AI Agent，使用 C# 和 .NET 10 开发，面向 Windows / Windows Server，支持文本与图片输入、多轮工具调用、引用消息和合并转发。
+基于 NapCat 的 QQ 群 AI Agent，使用 C# 和 .NET 10 开发，面向 Windows / Windows Server，支持文本、图片与视频输入、多轮工具调用、引用消息和合并转发。
 
 ## 安装与部署
 
@@ -88,7 +88,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 联网搜索使用服务 API KEY 的 Bearer 鉴权，example 已填写完整地址 `https://api.wsa.cloud.tencent.com/SearchPro`，仍需填写自己的密钥。接入方式见[腾讯云官方文档](https://cloud.tencent.com/document/product/1806/130615)。网页读取支持重定向、压缩响应及编码识别，提取静态正文，不执行 JavaScript；需要登录或浏览器渲染的网页可能无法获取。
 
-视频理解使用百炼 OpenAI 兼容接口和 Bearer 鉴权，`Endpoint` 填完整的 `chat/completions` 地址，并使用对应地域的 API Key。默认模型为 `qwen3.8-omni-flash`，同时理解视频画面和声音，返回文本。`Fps` 为视频采样帧率，默认 `2`；`ReasoningEffort` 默认 `none`（关闭思考），可设为 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`；`MaxTokens` 限制单次输出，默认 `4096`。视频 URL 直接交给百炼处理，客户端不下载视频、不生成视频 Base64；必须提供百炼可直接访问的视频文件地址，普通视频网页链接不能作为输入。接入方式见[阿里云百炼官方文档](https://help.aliyun.com/zh/model-studio/qwen-omni)。这一阶段仅提供工具与配置，QQ 视频消息段尚未接入。
+视频理解使用百炼 OpenAI 兼容接口和 Bearer 鉴权，`Endpoint` 填完整的 `chat/completions` 地址，并使用对应地域的 API Key。默认模型为 `qwen3.8-omni-flash`，同时理解视频画面和声音，返回文本。`Fps` 为视频采样帧率，默认 `2`；`ReasoningEffort` 默认 `none`（关闭思考），可设为 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`；`MaxTokens` 限制单次输出，默认 `4096`。视频 URL 直接交给百炼处理，客户端不下载视频、不生成视频 Base64；必须提供百炼可直接访问的视频文件地址，普通视频网页链接不能作为输入。接入方式见[阿里云百炼官方文档](https://help.aliyun.com/zh/model-studio/qwen-omni)。QQ 视频消息段已接入：启用 `understand_video` 并填写百炼配置后，主模型可根据用户问题调用工具分析正文、引用和合并转发中的视频。
 
 每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
@@ -124,6 +124,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | --- | --- |
 | 文本 | 正文文本，当前请求移除已匹配的触发前缀 |
 | 图片、商城表情 `mface` | 图片输入，保留在内容中的原顺序 |
+| 视频 `video` | 带视频地址的文字标记，提示主模型在需要理解内容时调用 `understand_video`；缺少 HTTP/HTTPS 地址时保留无法分析的说明 |
 | @ 他人 / 全体成员 | `@QQ号` / `@全体成员` 文本 |
 | QQ 表情 `face` | `[表情:名称]`；未知名称使用 `[表情]` |
 | JSON 卡片 | 按已解析到的摘要、标题、描述和链接生成文字；没有可提取字段时显示通用卡片标记 |
@@ -135,6 +136,8 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 引用消息通过 NapCat `get_msg` 逐层读取。模型消息顺序为系统提示词、较早引用、较近引用、当前请求；每层引用带发送者 QQ 和上下文说明。引用中的前缀不匹配也不移除。达到 `MaxReferenceDepth` 后使用已获取的内容；获取引用失败时回复“获取引用消息失败，请稍后再试”，不再请求模型。
 
 合并转发通过 `get_forward_msg` 展开，节点标注群名片或昵称及发送者 QQ，并受深度与节点数限制。获取失败时以“合并转发消息，获取失败”的标记继续处理；更深层未展开内容使用省略标记。转发资源按 ID 缓存，命中后直接使用本地数据。
+
+视频消息支持消息段数组与 CQ 字符串，共用正文、引用及转发节点的解析与转换流程。解析保留 `file`、`url` 和 `file_size`；优先传入 `url`，未提供时使用 `file` 中的 HTTP/HTTPS 地址。仅提供本地路径或文件标识时，当前不能交给百炼分析。
 
 当前转发深度的计数起点有差异：正文中的首层为 1，引用中的首层为 0。因此 `MaxForwardDepth = 0` 时，正文不展开转发，引用中的首层仍会展开；同一配置下引用中的转发可多展开一层。
 
