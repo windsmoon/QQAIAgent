@@ -78,7 +78,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         // 先展开正文里的合并转发，再按原顺序转换文本、图片和视频。
         await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken);
         var chatContentList = new List<ChatContent>();
-        AppendChatContents(chatContentList, message.MessageContentList, isReference: false);
+        await AppendChatContentsAsync(chatContentList, message.MessageContentList, message.GroupId, isReference: false, cancellationToken);
         // 消息列表只属于本次请求，不与其他用户或后续请求共享上下文。
         var messages = new List<ChatMessage>();
         // 系统提示词放在最前面，并随工具调用消息保留到本次请求结束。
@@ -193,7 +193,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         return messageId;
     }
 
-    private static void AppendChatContents(List<ChatContent> chatContentList, List<MessageContent> messageContentList, bool isReference)
+    private async Task AppendChatContentsAsync(List<ChatContent> chatContentList, List<MessageContent> messageContentList, long groupId, bool isReference, CancellationToken cancellationToken)
     {
         foreach (var content in messageContentList)
         {
@@ -211,6 +211,24 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                         var videoUrl = videoContent.Url != "" ? videoContent.Url : videoContent.File;
                         var hasVideoUrl = Uri.TryCreate(videoUrl, UriKind.Absolute, out var videoUri) &&
                             (videoUri.Scheme == Uri.UriSchemeHttp || videoUri.Scheme == Uri.UriSchemeHttps);
+                        if (hasVideoUrl == false && videoContent.FileId != "") // 没有 url 但是 fileId 不为空
+                        {
+                            var sourceGroupId = videoContent.SourceGroupId != 0 ? videoContent.SourceGroupId : groupId;
+                            try
+                            {
+                                // 群文件只有资源 ID 时在处理阶段获取直链，接收循环需继续运行以接收接口响应。
+                                videoUrl = await messageReader.GetGroupFileUrlAsync(sourceGroupId, videoContent.FileId, cancellationToken);
+                                hasVideoUrl = Uri.TryCreate(videoUrl, UriKind.Absolute, out videoUri) &&
+                                    (videoUri.Scheme == Uri.UriSchemeHttp || videoUri.Scheme == Uri.UriSchemeHttps);
+                            }
+                            catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
+                            {
+                                logger.LogWarning(exception, "获取视频群文件下载地址失败：群={GroupId}，文件ID={FileId}", sourceGroupId, videoContent.FileId);
+                                chatContentList.Add(new ChatTextContent { Text = $"[视频:{videoContent.File}，获取下载地址失败]" });
+                                break;
+                            }
+                        }
+
                         chatContentList.Add(new ChatTextContent
                         {
                             Text = hasVideoUrl
@@ -336,7 +354,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             {
                 Text = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n"
             });
-            AppendChatContents(contentList, refMessage.MessageContentList, isReference: true);
+            await AppendChatContentsAsync(contentList, refMessage.MessageContentList,
+                refMessage.GroupId != 0 ? refMessage.GroupId : groupMessage.GroupId, isReference: true, cancellationToken);
             // 每层都插到系统消息之后，让更早的引用排在前面；引用正文不处理触发前缀。
             messageList.Insert(referenceContextIndex, new ChatMessage
             {

@@ -112,6 +112,12 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return messages;
     }
 
+    public async Task<string> GetGroupFileUrlAsync(long groupId, string fileId, CancellationToken cancellationToken)
+    {
+        var data = await CallApiAsync("get_group_file_url", new { group_id = groupId, file_id = fileId }, cancellationToken);
+        return ReadOptionalString(data, "url");
+    }
+
     public async Task WaitForDisconnectAsync(CancellationToken cancellationToken)
     {
         var receiveTask = _receiveTask ?? throw new InvalidOperationException("NapCat 尚未建立连接。");
@@ -438,9 +444,13 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
                 });
                 break;
             case "video":
+            case "file" when Path.GetExtension(ReadOptionalString(data, "file")).ToLowerInvariant() is
+                ".mp4" or ".avi" or ".mkv" or ".mov" or ".flv" or ".wmv":
                 message.MessageContentList.Add(new VideoContent
                 {
                     File = data.GetProperty("file").GetString() ?? "",
+                    FileId = type == "file" ? ReadOptionalString(data, "file_id") : "",
+                    SourceGroupId = message.GroupId,
                     Url = ReadOptionalString(data, "url"),
                     FileSize = data.TryGetProperty("file_size", out var videoFileSize) && videoFileSize.ValueKind != JsonValueKind.Null
                         ? ReadMessageInteger(videoFileSize)
