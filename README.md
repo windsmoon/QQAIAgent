@@ -210,7 +210,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 | `QQAIAgent.Agent` | 模型接口、多轮请求处理、工具执行与统计 |
 | `QQAIAgent.Abstractions` | 插件契约、思考强度和请求工具上下文 |
 | `QQAIAgent.Infrastructure` | SQLite、群消息、转发及图片文件 ID 存储 |
-| `QQAIAgent.Messaging` | 群消息与内容类型、读取及发送接口 |
+| `QQAIAgent.Messaging` | 群消息与内容类型、共用 JSON/CQ 消息解析、读取及发送接口 |
 | `QQAIAgent.NapCat` | NapCat WebSocket 与协议解析 |
 | `DeepSeek` | DeepSeek HTTP 模型适配 |
 | `QQAIAgent.Tools` | 六个内置工具的插件实现 |

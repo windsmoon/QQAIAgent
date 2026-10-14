@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using QQAIAgent.Abstractions;
 using QQAIAgent.Abstractions.Tool;
@@ -212,21 +211,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 continue;
             }
 
-            using var document = JsonDocument.Parse(record.ContentJson);
-            var content = document.RootElement;
-            string text;
-            if (content.ValueKind == JsonValueKind.Array)
-            {
-                text = string.Concat(content.EnumerateArray()
-                    .Where(segment => segment.GetProperty("type").GetString() == "text")
-                    .Select(segment => segment.GetProperty("data").GetProperty("text").GetString()));
-            }
-            else
-            {
-                // CQ 字符串先移除真实消息段，再解码文本，保留用户输入的转义字面内容。
-                text = Regex.Replace(content.GetString() ?? "", @"\[CQ:[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+=[^,\]]*)*\]", "")
-                    .Replace("&#91;", "[").Replace("&#93;", "]").Replace("&amp;", "&");
-            }
+            var text = string.Concat(record.MessageContentList.OfType<TextContent>().Select(content => content.Text));
 
             if (string.IsNullOrWhiteSpace(text) == false)
             {

@@ -1,4 +1,4 @@
-﻿namespace QQAIAgent.NapCat;
+﻿namespace QQAIAgent.Messaging;
 
 /// <summary>QQ 系统表情（face 消息段）ID 与名称的对照表，数据来自 QQ 客户端表情资源。</summary>
 internal static class QqFaceTable

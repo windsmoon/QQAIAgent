@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Messaging;
@@ -76,12 +77,12 @@ public sealed class GroupMessageStore(string directoryPath)
         }, cancellationToken);
     }
 
-    /// <summary>读取截至当前消息发送时刻的最近记录，排除当前消息；数量限制在引用和正文类型过滤之前应用。</summary>
-    public Task<List<GroupMessage>> GetRecentMessagesAsync(long groupId, long? currentMessageId, long? currentMessageTime, int count, CancellationToken cancellationToken)
+    /// <summary>读取并还原截至当前消息发送时刻的最近群消息，排除当前消息；数量限制在引用和正文类型过滤之前应用。</summary>
+    public async Task<List<GroupMessage>> GetRecentMessagesAsync(long groupId, long? currentMessageId, long? currentMessageTime, int count, CancellationToken cancellationToken)
     {
         var database = _databases[groupId];
-        return database.QueryAsync<GroupMessage>("""
-            SELECT message_id AS MessageId, message_time AS MessageTime,
+        var messageList = await database.QueryAsync<GroupMessage>("""
+            SELECT @GroupId AS GroupId, message_id AS MessageId, message_time AS MessageTime,
                 sender_id AS SenderId, sender_nickname AS SenderNickname,
                 sender_card AS SenderCard, sub_type AS SubType,
                 content_json AS ContentJson, ref_message_id AS RefMessageId
@@ -92,10 +93,20 @@ public sealed class GroupMessageStore(string directoryPath)
             LIMIT @Count;
             """, new
         {
+            GroupId = groupId,
             CurrentMessageId = currentMessageId,
             CurrentMessageTime = currentMessageTime,
             Count = count
         }, cancellationToken);
+
+        foreach (var message in messageList)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var document = JsonDocument.Parse(message.ContentJson);
+            GroupMessageParser.ParseMessageContents(message, document.RootElement);
+        }
+
+        return messageList;
     }
     #endregion
 }
