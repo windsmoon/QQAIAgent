@@ -61,7 +61,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | `MaxReferenceDepth` | `5` | 最大引用层数，直接引用计为第 1 层；`0` 不读取引用 |
 | `MaxForwardDepth` | `5` | 合并转发的展开深度限制，计数边界见下文 |
 | `MaxForwardMessagesPerLayer` | `20` | 每个合并转发取前多少条节点消息；超出时给出截断说明 |
-| `ContextMessageCount` | `15` | 首次 ChatRequest 前从当前群消息记录库读取的最近记录数；只提取 text，本次已读取的引用链消息及非文本记录跳过后仍计数，不补取；`0` 不读取 |
+| `ContextMessageCount` | `15` | 首次 ChatRequest 前从当前群消息记录库读取的最近记录数；forward 本身算一条，内部文本不另计数；提取普通消息和展开后的 forward 中的 text，本次已读取的引用链消息及非文本记录跳过后仍计数，不补取；`0` 不读取 |
 | `LogContextRelevanceResults` | `false` | 输出关联判断汇总及逐条候选的正文、下标、分数和是否相关；设为 `true` 后输出，配置随 Agent 配置在启动时读取 |
 
 超时字段和模型调用次数填写正数。达到最后一次模型调用且模型仍要求工具时，不执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
@@ -104,7 +104,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Third/FFmpeg/`。`FfprobePath` 默认值为 `Third/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
 
-上下文关联判断固定在首次 ChatRequest 前由 Agent 调用。Agent 从当前群的本地消息记录库读取截至当前消息发送时刻的最近 `ContextMessageCount` 条记录，排除当前消息；取满指定数量后再跳过本次已读取的引用链消息和非文本记录，不补取。只提取原始消息中的 text，图片、表情及其他消息段均不作为候选；CQ 字符串移除消息段后保留文本。当前问题没有文本或过滤后没有候选时，直接发送 ChatRequest。其余情况传入 `query` 和按时间顺序排列的 `contexts`，通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`，只将相关文本按原始顺序放入系统提示词之后、引用消息之前；前置调用失败时不发送首个 ChatRequest。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。
+上下文关联判断固定在首次 ChatRequest 前由 Agent 调用。Agent 从当前群的本地消息记录库读取截至当前消息发送时刻的最近 `ContextMessageCount` 条记录，排除当前消息；forward 本身算一条，其内部文本不另计数。取满指定数量后再跳过本次已读取的引用链消息，不补取。剩余记录中的 forward 按 `MaxForwardDepth` 和 `MaxForwardMessagesPerLayer` 展开，只提取普通消息及展开后的 forward 中的 text，图片、表情及其他非文本消息段均不作为候选；每条群消息提取的文本合并为一个候选，无文本的记录跳过后不补取。CQ 字符串按同样规则解析和展开。当前问题没有文本或过滤后没有候选时，直接发送 ChatRequest。其余情况传入 `query` 和按时间顺序排列的 `contexts`，通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`，只将相关文本按原始顺序放入系统提示词之后、引用消息之前；前置调用失败时不发送首个 ChatRequest。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。
 
 工具返回 `hasRelatedContext`、`relevanceThreshold` 和按分数排列的 `results`，每项包含原始下标 `index`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具实现只负责关联判断，历史读取与上下文加入由 Agent 完成；example 和 local 中的 `Enabled` 保持 `false`，用于关闭主模型工具入口，不影响固定前置调用。前置调用沿用工具超时与请求总时限，计入首轮工具统计，下标为 `0`，主模型返回的工具调用从 `1` 开始。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 

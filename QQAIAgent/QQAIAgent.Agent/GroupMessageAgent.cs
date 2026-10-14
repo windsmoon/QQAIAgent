@@ -199,7 +199,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     {
         var recordList = await groupMessageStore.GetRecentMessagesAsync(message.GroupId, message.MessageId,
             message.MessageTime, config.ContextMessageCount, cancellationToken);
-        // 先限制记录数量，再过滤引用链和消息类型；跳过的记录仍计数，不继续补取。
+        // 先限制群消息记录数量，forward 本身算一条，内部文本不另计数；跳过的记录不继续补取。
         recordList.Reverse();
         var texts = new List<string>();
         foreach (var record in recordList)
@@ -210,6 +210,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 continue;
             }
 
+            await TryExpandForwardsAsync(record.MessageContentList, 1, cancellationToken);
             var text = string.Concat(record.MessageContentList.OfType<TextContent>().Select(content => content.Text));
 
             if (string.IsNullOrWhiteSpace(text) == false)
