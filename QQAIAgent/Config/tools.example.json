@@ -37,7 +37,7 @@
   {
     "Name": "check_context_relevance",
     "TimeoutSeconds": 30,
-    "Description": "通过阿里云百炼 rerank 判断候选上下文与当前提问的关联性，返回每段的原始下标、原文、关联分数、是否达到配置阈值，以及是否存在相关上下文。问题和候选文本由你提供，仅在需要判断上下文关联性时主动调用。",
+    "Description": "通过阿里云百炼 rerank 判断候选上下文与当前提问的关联性，返回关联阈值、是否存在相关上下文，以及每段的原始下标、关联分数和是否达到阈值。问题和候选文本由你提供，仅在需要判断上下文关联性时主动调用。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"minLength\":1,\"description\":\"当前用户的提问\"},\"contexts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"minItems\":1,\"description\":\"需要判断关联性的候选上下文文本列表，按原始消息顺序提供\"}},\"required\":[\"query\",\"contexts\"],\"additionalProperties\":false}",
     "Enabled": false
   }

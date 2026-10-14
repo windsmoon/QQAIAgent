@@ -23,6 +23,12 @@ public sealed class CheckContextRelevanceTool : ITool, IDisposable
         _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     }
 
+    /// <summary>创建可直接传给 ExecuteAsync 的问题和候选上下文参数 JSON。</summary>
+    public static string CreateRequestJson(string query, List<string> candidateList)
+    {
+        return JsonSerializer.Serialize(new { query, contexts = candidateList });
+    }
+
     /// <summary>对 Agent 传入的候选上下文进行百炼 rerank 排序，按配置阈值判断与问题的关联性。</summary>
     public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
@@ -76,23 +82,19 @@ public sealed class CheckContextRelevanceTool : ITool, IDisposable
         foreach (var rankedContext in rankedContexts.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // 排序结果的 index 是原始候选下标，用它关联原文，不能使用排序后的序号。
+            // 排序结果的 index 是原始候选下标，不能使用排序后的序号。
             var index = rankedContext.GetProperty("index").GetInt32();
             var relevanceScore = rankedContext.GetProperty("relevance_score").GetSingle();
             var isRelated = relevanceScore >= config.RelevanceThreshold;
             hasRelatedContext = hasRelatedContext || isRelated;
-            results.Add(new { index, context = candidateList[index], relevanceScore, isRelated });
+            results.Add(new { index, relevanceScore, isRelated });
         }
 
         return JsonSerializer.Serialize(new
         {
-            query,
-            relevanceThreshold = config.RelevanceThreshold,
             hasRelatedContext,
-            results,
-            model = config.Model,
-            requestId = result.GetProperty("request_id").GetString(),
-            usage = result.GetProperty("usage")
+            relevanceThreshold = config.RelevanceThreshold,
+            results
         });
     }
 

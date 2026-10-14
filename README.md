@@ -100,7 +100,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 
 上下文关联判断仅由主模型主动调用。Agent 传入 `query` 和按原始顺序排列的 `contexts` 文本列表，工具通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。默认任务说明关注理解提问所需的对话主题、实体、指代和意图。
 
-工具返回按分数排列的 `results`，每项包含原始下标 `index`、原文 `context`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`，同时返回模型名称、请求 ID 和 Token 用量。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具不自动读取附近群消息或加入聊天历史，默认在 example 和 local 工具定义中禁用。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
+工具返回 `hasRelatedContext`、`relevanceThreshold` 和按分数排列的 `results`，每项包含原始下标 `index`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具不自动读取附近群消息或加入聊天历史，默认在 example 和 local 工具定义中禁用。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 
 每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
