@@ -12,6 +12,7 @@ public class AgentConfig
     public List<long> BlacklistedGroups { get; set; } = [];
     public bool IsTestMode { get; set; }
     /// <summary>每条 QQ 用户请求首次模型调用的思考强度，后续可由工具调整。</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<ReasoningEffort>))]
     public ReasoningEffort FirstReasoningEffort { get; set; } = ReasoningEffort.Low;
     /// <summary>每条 QQ 请求允许调用模型的最大次数，包含首次请求和生成最终回复的请求。</summary>
     public int MaxModelCalls { get; set; } = 20;
