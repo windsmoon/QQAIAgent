@@ -120,7 +120,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             var isPreparingContext = modelCall == 0 && contextList.Count > 0;
             try
             {
-                if (isPreparingContext)
+                if (isPreparingContext && string.IsNullOrWhiteSpace(query) == false)
                 {
                     await AppendRelatedContextAsync(messages, historyContextIndex, query, contextList,
                         toolContext, requestId, modelCallId, cancellationToken);
@@ -248,13 +248,29 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }], toolContext, requestId, modelCallId, cancellationToken, isPreprocessing: true);
         var resultJson = string.Concat(toolMessages[0].ContentList.OfType<ChatTextContent>().Select(content => content.Text));
         using var result = JsonDocument.Parse(resultJson);
-        if (result.RootElement.GetProperty("hasRelatedContext").GetBoolean() == false)
+        var hasRelatedContext = result.RootElement.GetProperty("hasRelatedContext").GetBoolean();
+        var results = result.RootElement.GetProperty("results");
+        if (config.IsLogContextRelevanceResults)
+        {
+            logger.LogInformation("上下文关联判断结果：候选数={CandidateCount}，阈值={RelevanceThreshold}，是否存在相关上下文={HasRelatedContext}",
+                contextTexts.Count, result.RootElement.GetProperty("relevanceThreshold").GetDouble(), hasRelatedContext);
+            foreach (var item in results.EnumerateArray())
+            {
+                // 分数排序后的结果仍使用原始下标取回文本，转义正文换行以保持每条候选占一行。
+                var index = item.GetProperty("index").GetInt32();
+                var text = contextTexts[index].Replace("\r", "\\r").Replace("\n", "\\n");
+                logger.LogInformation("上下文候选：下标={Index}，内容={Text}，关联分数={RelevanceScore}，是否相关={IsRelated}",
+                    index, text, item.GetProperty("relevanceScore").GetSingle(), item.GetProperty("isRelated").GetBoolean());
+            }
+        }
+
+        if (hasRelatedContext == false)
         {
             return;
         }
 
         // 百炼按关联分数排序，加入对话前用原始下标恢复群消息的时间顺序。
-        var relatedIndices = result.RootElement.GetProperty("results").EnumerateArray()
+        var relatedIndices = results.EnumerateArray()
             .Where(item => item.GetProperty("isRelated").GetBoolean())
             .Select(item => item.GetProperty("index").GetInt32()).ToList();
         relatedIndices.Sort();

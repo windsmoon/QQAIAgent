@@ -44,7 +44,8 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
   "MaxReferenceDepth": 5,
   "MaxForwardDepth": 5,
   "MaxForwardMessagesPerLayer": 20,
-  "ContextMessageCount": 15
+  "ContextMessageCount": 15,
+  "LogContextRelevanceResults": false
 }
 ```
 
@@ -59,6 +60,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | `MaxForwardDepth` | `5` | 合并转发的展开深度限制，计数边界见下文 |
 | `MaxForwardMessagesPerLayer` | `20` | 每个合并转发取前多少条节点消息；超出时给出截断说明 |
 | `ContextMessageCount` | `15` | 首次 ChatRequest 前从当前群消息记录库读取的最近记录数；只提取 text，本次已读取的引用链消息及非文本记录跳过后仍计数，不补取；`0` 不读取 |
+| `LogContextRelevanceResults` | `false` | 输出关联判断汇总及逐条候选的正文、下标、分数和是否相关；设为 `true` 后输出，配置随 Agent 配置在启动时读取 |
 
 超时字段和模型调用次数填写正数。达到最后一次模型调用且模型仍要求工具时，不执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
 

@@ -22,6 +22,8 @@ public class AgentConfig
     public int MaxForwardMessagesPerLayer { get; set; } = 20;
     /// <summary>关联判断前读取的最近群消息记录数；引用链消息和非文本记录被跳过时仍占用名额，0 表示不读取。</summary>
     public int ContextMessageCount { get; set; } = 15;
+    /// <summary>是否输出上下文关联判断的汇总、候选正文和逐条评分日志，默认关闭。</summary>
+    public bool IsLogContextRelevanceResults { get; set; }
     /// <summary>启动时从 Markdown 文件加载的系统提示词；空白时不发送系统消息。</summary>
     [JsonIgnore]
     public string SystemPrompt { get; set; } = string.Empty;

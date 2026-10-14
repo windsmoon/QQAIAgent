@@ -2,6 +2,6 @@
   "ApiKey": "",
   "Endpoint": "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
   "Model": "qwen3-rerank",
-  "RelevanceThreshold": 0.8,
+  "RelevanceThreshold": 0.5,
   "Instruct": "Given a user's question in a group conversation, retrieve nearby messages that provide relevant conversational context, including the topic, entities, references, or intent needed to understand the question."
 }
