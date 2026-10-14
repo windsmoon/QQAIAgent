@@ -24,7 +24,9 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | [system-prompt.example.md](QQAIAgent/Config/system-prompt.example.md) | `system-prompt.local.md` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
 | [websearch.example.json](QQAIAgent/Config/websearch.example.json) | `websearch.local.json` | 启用 `web_search` 时填写服务 `ApiKey`，确认 `Endpoint`；未使用搜索时不读取此文件 |
 | [videounderstanding.example.json](QQAIAgent/Config/videounderstanding.example.json) | `videounderstanding.local.json` | 启用 `understand_video` 时填写百炼 `ApiKey`，确认模型、输出上限、视频输入限制和 `FfprobePath`；未使用视频理解时不读取此文件 |
-| [contextrelevance.example.json](QQAIAgent/Config/contextrelevance.example.json) | `contextrelevance.local.json` | 启用 `check_context_relevance` 时填写百炼 `ApiKey`，将 `Endpoint` 中的 `{WorkspaceId}` 替换为实际业务空间 ID，并确认模型、关联阈值和排序任务说明；未调用工具时不读取此文件 |
+| [contextrelevance.example.json](QQAIAgent/Config/contextrelevance.example.json) | `contextrelevance.local.json` | 启用 `check_context_relevance` 时填写百炼 `ApiKey`，确认 `Endpoint` 对应的业务空间、模型、关联阈值和排序任务说明；未调用工具时不读取此文件 |
+
+视频理解和上下文关联判断的 example、local 地址均使用北京地域业务空间的专属域名，需填写该空间对应的 API Key；更换业务空间时同步修改对应的 `Endpoint`。
 
 前五个 local 文件需要准备。模板默认启用获取时间和调整思考强度，关闭联网搜索、网页读取、视频理解与上下文关联判断；启用搜索、视频理解或上下文关联判断时再准备对应配置。上下文关联判断的 example 和 local 文件显示在 Rider 的解决方案级 `Config` 文件夹下。
 
@@ -96,7 +98,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Third/FFmpeg/`。`FfprobePath` 默认值为 `Third/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
 
-上下文关联判断仅由主模型主动调用。Agent 传入 `query` 和按原始顺序排列的 `contexts` 文本列表，工具通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`。`contextrelevance.local.json` 中的 `Endpoint` 为完整请求地址，模板使用北京地域业务空间地址，需替换 `{WorkspaceId}` 并填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。默认任务说明关注理解提问所需的对话主题、实体、指代和意图。
+上下文关联判断仅由主模型主动调用。Agent 传入 `query` 和按原始顺序排列的 `contexts` 文本列表，工具通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。默认任务说明关注理解提问所需的对话主题、实体、指代和意图。
 
 工具返回按分数排列的 `results`，每项包含原始下标 `index`、原文 `context`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`，同时返回模型名称、请求 ID 和 Token 用量。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具不自动读取附近群消息或加入聊天历史，默认在 example 和 local 工具定义中禁用。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 
