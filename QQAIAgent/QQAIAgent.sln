@@ -26,6 +26,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{A97959
 		Config\system-prompt.local.md = Config\system-prompt.local.md
 		Config\videounderstanding.example.json = Config\videounderstanding.example.json
 		Config\videounderstanding.local.json = Config\videounderstanding.local.json
+		Config\contextrelevance.example.json = Config\contextrelevance.example.json
+		Config\contextrelevance.local.json = Config\contextrelevance.local.json
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Abstractions", "QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj", "{A27BF88D-950D-4F34-8B90-165D6A8B1E70}"
