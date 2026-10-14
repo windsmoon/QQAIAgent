@@ -24,11 +24,11 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | [system-prompt.example.md](QQAIAgent/Config/system-prompt.example.md) | `system-prompt.local.md` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
 | [websearch.example.json](QQAIAgent/Config/websearch.example.json) | `websearch.local.json` | 启用 `web_search` 时填写服务 `ApiKey`，确认 `Endpoint`；未使用搜索时不读取此文件 |
 | [videounderstanding.example.json](QQAIAgent/Config/videounderstanding.example.json) | `videounderstanding.local.json` | 启用 `understand_video` 时填写百炼 `ApiKey`，确认模型、输出上限、视频输入限制和 `FfprobePath`；未使用视频理解时不读取此文件 |
-| [contextrelevance.example.json](QQAIAgent/Config/contextrelevance.example.json) | `contextrelevance.local.json` | 启用 `check_context_relevance` 时填写百炼 `ApiKey`，确认 `Endpoint` 对应的业务空间、模型、关联阈值和排序任务说明；未调用工具时不读取此文件 |
+| [contextrelevance.example.json](QQAIAgent/Config/contextrelevance.example.json) | `contextrelevance.local.json` | Agent 在首次 ChatRequest 前调用 `check_context_relevance`，需填写百炼 `ApiKey`，确认 `Endpoint` 对应的业务空间、模型、关联阈值和排序任务说明；没有可判断的候选文本时不读取此文件 |
 
 视频理解和上下文关联判断的 example、local 地址均使用北京地域业务空间的专属域名，需填写该空间对应的 API Key；更换业务空间时同步修改对应的 `Endpoint`。
 
-前五个 local 文件需要准备。模板默认启用获取时间和调整思考强度，关闭联网搜索、网页读取、视频理解与上下文关联判断；启用搜索、视频理解或上下文关联判断时再准备对应配置。上下文关联判断的 example 和 local 文件显示在 Rider 的解决方案级 `Config` 文件夹下。
+前五个 local 文件需要准备。模板默认允许主模型调用获取时间和调整思考强度，关闭联网搜索、网页读取、视频理解与上下文关联判断的模型工具入口；启用搜索或视频理解时再准备对应配置。上下文关联判断由 Agent 固定在首次 ChatRequest 前调用，需准备对应配置，其 example 和 local 文件显示在 Rider 的解决方案级 `Config` 文件夹下。
 
 ### Agent 配置
 
@@ -43,7 +43,8 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
   "QQRequestTimeoutSeconds": 300,
   "MaxReferenceDepth": 5,
   "MaxForwardDepth": 5,
-  "MaxForwardMessagesPerLayer": 20
+  "MaxForwardMessagesPerLayer": 20,
+  "ContextMessageCount": 15
 }
 ```
 
@@ -57,6 +58,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | `MaxReferenceDepth` | `5` | 最大引用层数，直接引用计为第 1 层；`0` 不读取引用 |
 | `MaxForwardDepth` | `5` | 合并转发的展开深度限制，计数边界见下文 |
 | `MaxForwardMessagesPerLayer` | `20` | 每个合并转发取前多少条节点消息；超出时给出截断说明 |
+| `ContextMessageCount` | `15` | 首次 ChatRequest 前从当前群消息记录库读取的最近记录数；只提取 text，本次已读取的引用链消息及非文本记录跳过后仍计数，不补取；`0` 不读取 |
 
 超时字段和模型调用次数填写正数。达到最后一次模型调用且模型仍要求工具时，不执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
 
@@ -98,9 +100,9 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Third/FFmpeg/`。`FfprobePath` 默认值为 `Third/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
 
-上下文关联判断仅由主模型主动调用。Agent 传入 `query` 和按原始顺序排列的 `contexts` 文本列表，工具通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。默认任务说明关注理解提问所需的对话主题、实体、指代和意图。
+上下文关联判断固定在首次 ChatRequest 前由 Agent 调用。Agent 从当前群的本地消息记录库读取截至当前消息发送时刻的最近 `ContextMessageCount` 条记录，排除当前消息；取满指定数量后再跳过本次已读取的引用链消息和非文本记录，不补取。只提取原始消息中的 text，图片、表情及其他消息段均不作为候选；CQ 字符串移除消息段后保留文本。当前问题没有文本或过滤后没有候选时，直接发送 ChatRequest。其余情况传入 `query` 和按时间顺序排列的 `contexts`，通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`，只将相关文本按原始顺序放入系统提示词之后、引用消息之前；前置调用失败时不发送首个 ChatRequest。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。
 
-工具返回 `hasRelatedContext`、`relevanceThreshold` 和按分数排列的 `results`，每项包含原始下标 `index`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具不自动读取附近群消息或加入聊天历史，默认在 example 和 local 工具定义中禁用。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
+工具返回 `hasRelatedContext`、`relevanceThreshold` 和按分数排列的 `results`，每项包含原始下标 `index`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具实现只负责关联判断，历史读取与上下文加入由 Agent 完成；example 和 local 中的 `Enabled` 保持 `false`，用于关闭主模型工具入口，不影响固定前置调用。前置调用沿用工具超时与请求总时限，计入首轮工具统计，下标为 `0`，主模型返回的工具调用从 `1` 开始。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 
 每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
@@ -187,13 +189,13 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 | `Data/Messages/<群号>.sqlite3` | `Database.MessagesDirectory` | 允许群的原始消息记录 |
 | `Data/Messages/forward.sqlite3` | `Database.MessagesDirectory` | `forward_messages` 合并转发响应缓存 |
 
-请求统计使用 `requests`、`model_calls`、`tool_calls` 关联机器人、群、用户、轮次、思考强度、时间、耗时、状态和回复消息 ID。实际开始执行的工具调用才计入次数，未启用、未加载及次数上限后未执行的工具不计入。统计表不保存用户或模型正文、工具参数、工具结果和异常正文。
+请求统计使用 `requests`、`model_calls`、`tool_calls` 关联机器人、群、用户、轮次、思考强度、时间、耗时、状态和回复消息 ID。实际开始执行的工具调用才计入次数，包含 Agent 的前置关联判断；主模型未启用、未加载及次数上限后未执行的工具不计入。统计表不保存用户或模型正文、工具参数、工具结果和异常正文。
 
 每轮记录接口返回的输入、输出、总 Token、缓存命中/未命中 Token 和可选思考 Token。未返回的字段保存为 `NULL`，零值保存为 `0`；总量使用接口返回值，不额外累加思考 Token。字段说明见 [DeepSeek 官方用量文档](https://api-docs.deepseek.com/api/create-chat-completion/)。`request_statistics` 汇总各轮已知用量和调用次数，`tool_usage` 按机器人、群、用户、工具汇总使用情况；存在未知轮次时，用量汇总只包含已知部分。
 
 统计库启用 WAL。回复发送成功后记录回复消息 ID，并在日志中输出本次请求的总输入、总输出 Token 和输入缓存命中率；输入缓存命中率使用命中输入 Token / 总输入 Token，缺少必要数据时显示未知。
 
-群消息记录与业务处理独立，保留发送时间、发送者信息、子类型、完整原始正文 JSON 和引用关系，包括未触发请求、机器人自身消息、允许列表内的黑名单群消息和未支持消息段。正文保留数组或 CQ 字符串原值，重复上报逐次插入；记录失败写入日志，不阻塞业务。记录与缓存不自动作为聊天历史上下文，也不导入旧版数据库。
+群消息记录与业务处理独立，保留发送时间、发送者信息、子类型、完整原始正文 JSON 和引用关系，包括未触发请求、机器人自身消息、允许列表内的黑名单群消息和未支持消息段。正文保留数组或 CQ 字符串原值，重复上报逐次插入；记录失败写入日志，不阻塞业务。Agent 在首次 ChatRequest 前仅从当前群的最近记录中选择关联的 text 作为历史上下文；不导入旧版数据库。
 
 ## 项目结构与插件扩展
 

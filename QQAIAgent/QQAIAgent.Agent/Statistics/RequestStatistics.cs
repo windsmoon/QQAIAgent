@@ -193,7 +193,7 @@ public sealed class RequestStatistics(IDatabase database)
         }, cancellationToken);
     }
 
-    /// <summary>在实际调用工具前记录一次使用；未启用、未加载或达到轮次上限的工具不计入使用次数。</summary>
+    /// <summary>在实际调用工具前记录一次使用，包含 Agent 的前置调用；主模型未启用、未加载或达到轮次上限的工具不计入。</summary>
     public async Task<string> StartToolCallAsync(string requestId, string modelCallId, string providerToolCallId, int callIndex, string toolName, CancellationToken cancellationToken)
     {
         var toolCallId = Guid.NewGuid().ToString("N");

@@ -10,19 +10,21 @@ namespace QQAIAgent.Agent;
 public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToolDefinition> toolDefinitions, RequestStatistics statistics, ILogger<ToolExecutor> logger)
 {
     #region methods
-    /// <summary>按顺序执行已启用的工具调用，返回带调用 ID 的工具消息；调用失败以结果文本返回，请求取消继续抛出。</summary>
-    public async Task<IReadOnlyList<ChatMessage>> ExecuteAsync(IReadOnlyList<ChatToolCall> toolCalls, ToolContext context, string requestId, string modelCallId, CancellationToken cancellationToken)
+    /// <summary>按顺序执行工具调用；Agent 的前置调用不受主模型启用状态限制，调用失败以结果文本返回，请求取消继续抛出。</summary>
+    public async Task<IReadOnlyList<ChatMessage>> ExecuteAsync(IReadOnlyList<ChatToolCall> toolCalls, ToolContext context, string requestId, string modelCallId, CancellationToken cancellationToken, bool isPreprocessing = false)
     {
         var messages = new List<ChatMessage>(toolCalls.Count);
+        // 首轮前置调用占用下标 0，主模型返回的工具调用仍从 1 开始，避免统计唯一键冲突。
         var callIndex = 0;
         foreach (var toolCall in toolCalls)
         {
-            callIndex++;
+            callIndex = isPreprocessing ? 0 : callIndex + 1;
             cancellationToken.ThrowIfCancellationRequested();
             using var toolScope = logger.BeginScope("工具={ToolName}，调用ID={ToolCallId}", toolCall.Name, toolCall.Id);
 
             string content;
-            var toolDefinition = toolDefinitions.FirstOrDefault(definition => definition.Enabled && definition.Name == toolCall.Name);
+            var toolDefinition = toolDefinitions.FirstOrDefault(definition =>
+                (isPreprocessing || definition.Enabled) && definition.Name == toolCall.Name);
             if (toolDefinition is null)
             {
                 content = $"工具未启用或未配置：{toolCall.Name}";

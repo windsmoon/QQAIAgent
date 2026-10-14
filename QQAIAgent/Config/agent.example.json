@@ -6,5 +6,6 @@
   "QQRequestTimeoutSeconds": 300,
   "MaxReferenceDepth": 5,
   "MaxForwardDepth": 5,
-  "MaxForwardMessagesPerLayer": 20
+  "MaxForwardMessagesPerLayer": 20,
+  "ContextMessageCount": 15
 }

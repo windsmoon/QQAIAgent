@@ -20,6 +20,8 @@ public class AgentConfig
     public int MaxForwardDepth { get; set; } = 5;
     /// <summary>单层合并转发最多展开的消息条数，超出部分截断。</summary>
     public int MaxForwardMessagesPerLayer { get; set; } = 20;
+    /// <summary>关联判断前读取的最近群消息记录数；引用链消息和非文本记录被跳过时仍占用名额，0 表示不读取。</summary>
+    public int ContextMessageCount { get; set; } = 15;
     /// <summary>启动时从 Markdown 文件加载的系统提示词；空白时不发送系统消息。</summary>
     [JsonIgnore]
     public string SystemPrompt { get; set; } = string.Empty;

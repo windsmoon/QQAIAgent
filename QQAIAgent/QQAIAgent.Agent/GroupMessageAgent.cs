@@ -1,18 +1,23 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using QQAIAgent.Abstractions;
 using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Agent.Statistics;
+using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
 
 namespace QQAIAgent.Agent;
 
-public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
+public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
 {
     #region fields
+    private readonly List<ChatToolDefinition> _enabledToolDefinitions = toolDefinitions.Where(tool => tool.Enabled).ToList();
     #endregion
     
     #region methods
@@ -87,8 +92,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = config.SystemPrompt }] });
         }
 
+        var historyContextIndex = messages.Count;
+        var refMessageIdResults = new HashSet<long>();
         // 处理引用
-        var referenceResult = await ParseReferenceAsync(messages, message, requestId, cancellationToken);
+        (bool Success, string ErrorType) referenceResult = await ParseReferenceAsync(messages, message, requestId, refMessageIdResults, cancellationToken);
         if (referenceResult.Success == false)
         {
             return (null, "reference_failed", referenceResult.ErrorType);
@@ -98,22 +105,33 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
         var toolContext = new ToolContext();
+        toolContext.ReasoningEffort = ReasoningEffort.Low;
+        var query = string.Concat(message.MessageContentList.OfType<TextContent>().Select(content => content.Text));
+        var contextList = await ReadContextTextsAsync(message, refMessageIdResults, cancellationToken);
 
         for (var modelCall = 0; modelCall < config.MaxModelCalls; modelCall++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             using var roundScope = logger.BeginScope("轮次={ModelCall}/{MaxModelCalls}", modelCall + 1, config.MaxModelCalls);
 
-            logger.LogInformation("开始请求模型：消息数={MessageCount}，思考强度={ReasoningEffort}", messages.Count, toolContext.ReasoningEffort);
             var modelCallId = await statistics.StartModelCallAsync(requestId, modelCall + 1, toolContext.ReasoningEffort, cancellationToken);
             var startedAt = Stopwatch.GetTimestamp();
             ChatResponse response;
+            var isPreparingContext = modelCall == 0 && contextList.Count > 0;
             try
             {
+                if (isPreparingContext)
+                {
+                    await AppendRelatedContextAsync(messages, historyContextIndex, query, contextList,
+                        toolContext, requestId, modelCallId, cancellationToken);
+                }
+
+                isPreparingContext = false;
+                logger.LogInformation("开始请求模型：消息数={MessageCount}，思考强度={ReasoningEffort}", messages.Count, toolContext.ReasoningEffort);
                 response = await chatModel.CompleteAsync(new ChatRequest
                 {
                     Messages = messages,
-                    Tools = chatModel.SupportsToolCalling ? toolDefinitions : [],
+                    Tools = chatModel.SupportsToolCalling ? _enabledToolDefinitions : [],
                     ReasoningEffort = toolContext.ReasoningEffort
                 }, cancellationToken);
             }
@@ -128,11 +146,12 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             {
                 await statistics.FinishModelCallAsync(modelCallId, exception is OperationCanceledException ? "timeout" : "failed", "",
                     (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, exception.GetType().Name, CancellationToken.None);
-                logger.LogWarning("模型请求失败：超时={IsTimeout}，耗时={ElapsedMilliseconds:F0} ms，原因={Reason}",
-                    exception is OperationCanceledException, Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, exception.Message);
-                var failureText = exception is OperationCanceledException
-                    ? "模型请求超时，请稍后再试"
-                    : "模型请求失败，请稍后再试";
+                logger.LogWarning("请求失败：阶段={Stage}，超时={IsTimeout}，耗时={ElapsedMilliseconds:F0} ms，原因={Reason}",
+                    isPreparingContext ? "上下文关联判断" : "模型请求", exception is OperationCanceledException,
+                    Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, exception.Message);
+                var failureText = isPreparingContext
+                    ? "上下文关联判断失败，请稍后再试"
+                    : exception is OperationCanceledException ? "模型请求超时，请稍后再试" : "模型请求失败，请稍后再试";
                 await SendReplyAsync(requestId, message, failureText, cancellationToken);
                 // 提示发送后继续抛出原异常，由宿主记录日志并处理下一条消息。
                 throw;
@@ -176,6 +195,78 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         logger.LogWarning("已达到模型调用次数上限：上限={MaxModelCalls}", config.MaxModelCalls);
         return (await SendReplyAsync(requestId, message, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit", "");
+    }
+
+    private async Task<List<string>> ReadContextTextsAsync(GroupMessage message, HashSet<long> referenceMessageIds, CancellationToken cancellationToken)
+    {
+        var recordList = await groupMessageStore.GetRecentMessagesAsync(message.GroupId, message.MessageId,
+            message.MessageTime, config.ContextMessageCount, cancellationToken);
+        // 先限制记录数量，再过滤引用链和消息类型；跳过的记录仍计数，不继续补取。
+        recordList.Reverse();
+        var texts = new List<string>();
+        foreach (var record in recordList)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (record.MessageId is long messageId && referenceMessageIds.Contains(messageId))
+            {
+                continue;
+            }
+
+            using var document = JsonDocument.Parse(record.ContentJson);
+            var content = document.RootElement;
+            string text;
+            if (content.ValueKind == JsonValueKind.Array)
+            {
+                text = string.Concat(content.EnumerateArray()
+                    .Where(segment => segment.GetProperty("type").GetString() == "text")
+                    .Select(segment => segment.GetProperty("data").GetProperty("text").GetString()));
+            }
+            else
+            {
+                // CQ 字符串先移除真实消息段，再解码文本，保留用户输入的转义字面内容。
+                text = Regex.Replace(content.GetString() ?? "", @"\[CQ:[a-zA-Z0-9_]+(?:,[a-zA-Z0-9_]+=[^,\]]*)*\]", "")
+                    .Replace("&#91;", "[").Replace("&#93;", "]").Replace("&amp;", "&");
+            }
+
+            if (string.IsNullOrWhiteSpace(text) == false)
+            {
+                texts.Add(text);
+            }
+        }
+
+        return texts;
+    }
+
+    private async Task AppendRelatedContextAsync(List<ChatMessage> messages, int contextIndex, string query, List<string> contextTexts,
+        ToolContext toolContext, string requestId, string modelCallId, CancellationToken cancellationToken)
+    {
+        var toolMessages = await toolExecutor.ExecuteAsync([new ChatToolCall
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "check_context_relevance",
+            ArgumentsJson = JsonSerializer.Serialize(new { query, contexts = contextTexts })
+        }], toolContext, requestId, modelCallId, cancellationToken, isPreprocessing: true);
+        var resultJson = string.Concat(toolMessages[0].ContentList.OfType<ChatTextContent>().Select(content => content.Text));
+        using var result = JsonDocument.Parse(resultJson);
+        if (result.RootElement.GetProperty("hasRelatedContext").GetBoolean() == false)
+        {
+            return;
+        }
+
+        // 百炼按关联分数排序，加入对话前用原始下标恢复群消息的时间顺序。
+        var relatedIndices = result.RootElement.GetProperty("results").EnumerateArray()
+            .Where(item => item.GetProperty("isRelated").GetBoolean())
+            .Select(item => item.GetProperty("index").GetInt32()).ToList();
+        relatedIndices.Sort();
+        messages.Insert(contextIndex, new ChatMessage
+        {
+            Role = ChatRole.User,
+            ContentList = [new ChatTextContent
+            {
+                Text = "以下是当前群与提问相关的近期历史消息，仅作为上下文：\n" +
+                    string.Join("\n", relatedIndices.Select(index => contextTexts[index]))
+            }]
+        });
     }
 
     private async Task<long> SendReplyAsync(string requestId, GroupMessage message, string text, CancellationToken cancellationToken)
@@ -330,12 +421,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
     }
 
-    private async Task<(bool Success, string ErrorType)> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, string requestId, CancellationToken cancellationToken)
+    private async Task<(bool Success, string ErrorType)> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, string requestId, HashSet<long> refMessageIdResults, CancellationToken cancellationToken)
     {
         var referenceContextIndex = messageList.Count;
         var refMessageId = groupMessage.RefMessageId;
         for (int referenceDepth = 0; referenceDepth < config.MaxReferenceDepth && refMessageId is long currentRefMessageId; referenceDepth++)
         {
+            refMessageIdResults.Add(currentRefMessageId);
             GroupMessage refMessage;
             try
             {

@@ -75,5 +75,27 @@ public sealed class GroupMessageStore(string directoryPath)
             message.RefMessageId
         }, cancellationToken);
     }
+
+    /// <summary>读取截至当前消息发送时刻的最近记录，排除当前消息；数量限制在引用和正文类型过滤之前应用。</summary>
+    public Task<List<GroupMessage>> GetRecentMessagesAsync(long groupId, long? currentMessageId, long? currentMessageTime, int count, CancellationToken cancellationToken)
+    {
+        var database = _databases[groupId];
+        return database.QueryAsync<GroupMessage>("""
+            SELECT message_id AS MessageId, message_time AS MessageTime,
+                sender_id AS SenderId, sender_nickname AS SenderNickname,
+                sender_card AS SenderCard, sub_type AS SubType,
+                content_json AS ContentJson, ref_message_id AS RefMessageId
+            FROM messages
+            WHERE (@CurrentMessageTime IS NULL OR message_time <= @CurrentMessageTime)
+                AND (@CurrentMessageId IS NULL OR message_id IS NULL OR message_id != @CurrentMessageId)
+            ORDER BY message_time DESC, id DESC
+            LIMIT @Count;
+            """, new
+        {
+            CurrentMessageId = currentMessageId,
+            CurrentMessageTime = currentMessageTime,
+            Count = count
+        }, cancellationToken);
+    }
     #endregion
 }

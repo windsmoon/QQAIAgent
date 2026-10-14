@@ -51,11 +51,10 @@ var toolsConfigPath = Path.Combine(configDirectory, "tools.local.json");
 var toolsConfigJson = File.ReadAllText(toolsConfigPath);
 var toolDefinitions = JsonSerializer.Deserialize<List<ChatToolDefinition>>(toolsConfigJson)
     ?? throw new InvalidDataException($"工具配置不能为 null：{toolsConfigPath}");
-var enabledTools = toolDefinitions.Where(tool => tool.Enabled).ToList();
 
 builder.Services.AddSingleton(napCatConfig);
 builder.Services.AddSingleton(agentConfig);
-builder.Services.AddSingleton<IReadOnlyList<ChatToolDefinition>>(enabledTools);
+builder.Services.AddSingleton<IReadOnlyList<ChatToolDefinition>>(toolDefinitions);
 builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredService<NapCatClient>());
@@ -65,7 +64,8 @@ builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(), services.GetRequiredService<IMessageReader>(),
     services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>(),
-    services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
+    services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<GroupMessageStore>(),
+    services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
