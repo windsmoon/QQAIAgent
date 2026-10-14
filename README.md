@@ -39,6 +39,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
   "AllowedGroups": [123456789],
   "BlacklistedGroups": [],
   "IsTestMode": false,
+  "FirstReasoningEffort": "Low",
   "MaxModelCalls": 20,
   "QQRequestTimeoutSeconds": 300,
   "MaxReferenceDepth": 5,
@@ -54,6 +55,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | `AllowedGroups` | `[]` | 允许记录和处理的群；空列表不处理任何群 |
 | `BlacklistedGroups` | `[]` | 在允许列表中的黑名单群只记录消息，不触发模型 |
 | `IsTestMode` | `false` | 普通模式使用 `123` 或 @ 机器人触发；测试模式仅接受 `321` 前缀 |
+| `FirstReasoningEffort` | `Low` | 每条请求首次模型调用的思考强度，枚举值为 `Minimal`、`Low`、`Medium`、`High`、`Max`；后续可由工具调整 |
 | `MaxModelCalls` | `20` | 单条请求的模型调用总次数，包含首次请求和最终回复请求 |
 | `QQRequestTimeoutSeconds` | `300` | 从接收消息到正常回复的总时限，包含排队、引用、转发、图片处理、模型和工具调用 |
 | `MaxReferenceDepth` | `5` | 最大引用层数，直接引用计为第 1 层；`0` 不读取引用 |
@@ -106,7 +108,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 
 工具返回 `hasRelatedContext`、`relevanceThreshold` 和按分数排列的 `results`，每项包含原始下标 `index`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具实现只负责关联判断，历史读取与上下文加入由 Agent 完成；example 和 local 中的 `Enabled` 保持 `false`，用于关闭主模型工具入口，不影响固定前置调用。前置调用沿用工具超时与请求总时限，计入首轮工具统计，下标为 `0`，主模型返回的工具调用从 `1` 开始。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 
-每条新请求从 `minimal` 思考强度开始。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
+每条新请求从 Agent 配置的 `FirstReasoningEffort` 思考强度开始，省略时默认使用 `Low`。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
 系统提示词全文作为系统消息发送，不渲染 Markdown。模板要求简体中文、简短自然的纯文本回复，允许按需求展开；格式由提示词引导，程序不按字数截断或删除 Markdown。
 

@@ -2,6 +2,7 @@
   "AllowedGroups": [],
   "BlacklistedGroups": [],
   "IsTestMode": false,
+  "FirstReasoningEffort": "Low",
   "MaxModelCalls": 20,
   "QQRequestTimeoutSeconds": 300,
   "MaxReferenceDepth": 5,

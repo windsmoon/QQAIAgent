@@ -2,7 +2,7 @@
   {
     "Name": "set_reasoning_effort",
     "TimeoutSeconds": 5,
-    "Description": "设置下一次模型请求的思考强度。每条新用户消息从 minimal 开始；需要更强推理时调用，能回答时直接回答。不调用则保留当前强度，也可按后续任务需要降低强度。可与普通工具同时调用，同轮多次设置以最后一次有效设置为准。档位由低到高为 minimal、low、medium、high、max，实际参数由模型类库映射。",
+    "Description": "设置下一次模型请求的思考强度。每条新用户消息的初始强度由 Agent 配置决定；需要更强推理时调用，能回答时直接回答。不调用则保留当前强度，也可按后续任务需要降低强度。可与普通工具同时调用，同轮多次设置以最后一次有效设置为准。档位由低到高为 minimal、low、medium、high、max，实际参数由模型类库映射。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"effort\":{\"type\":\"string\",\"enum\":[\"minimal\",\"low\",\"medium\",\"high\",\"max\"]}},\"required\":[\"effort\"],\"additionalProperties\":false}",
     "Enabled": true
   },

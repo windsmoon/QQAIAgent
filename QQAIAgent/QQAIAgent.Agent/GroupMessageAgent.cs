@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using QQAIAgent.Abstractions;
 using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
@@ -104,7 +103,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
         var toolContext = new ToolContext();
-        toolContext.ReasoningEffort = ReasoningEffort.Low;
+        toolContext.ReasoningEffort = config.FirstReasoningEffort;
         var query = string.Concat(message.MessageContentList.OfType<TextContent>().Select(content => content.Text));
         var contextList = await ReadContextTextsAsync(message, refMessageIdResults, cancellationToken);
 

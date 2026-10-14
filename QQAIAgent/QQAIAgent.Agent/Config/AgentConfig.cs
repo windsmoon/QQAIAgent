@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using QQAIAgent.Abstractions;
 
 namespace QQAIAgent.Agent.Config;
 
@@ -10,6 +11,8 @@ public class AgentConfig
     /// <summary>黑名单群号只记录消息，不处理</summary>
     public List<long> BlacklistedGroups { get; set; } = [];
     public bool IsTestMode { get; set; }
+    /// <summary>每条 QQ 用户请求首次模型调用的思考强度，后续可由工具调整。</summary>
+    public ReasoningEffort FirstReasoningEffort { get; set; } = ReasoningEffort.Low;
     /// <summary>每条 QQ 请求允许调用模型的最大次数，包含首次请求和生成最终回复的请求。</summary>
     public int MaxModelCalls { get; set; } = 20;
     /// <summary>每条 QQ 用户请求从接收到正常回复的总超时秒数，包含排队、引用读取、所有模型调用和工具执行。</summary>
