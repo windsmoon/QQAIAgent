@@ -299,7 +299,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             var expanded = new List<MessageContent>();
             try
             {
-                var nodes = await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken);
+                // 内层转发的节点已随外层响应内联返回，直接使用；外层转发才需要调接口获取。
+                IReadOnlyList<GroupMessage> nodes = forward.InnerMessages.Count > 0
+                    ? forward.InnerMessages
+                    : await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken);
                 var limitedMessageList = nodes.Take(config.MaxForwardMessagesPerLayer).ToList();
                 expanded.Add(new TextContent
                 {
@@ -312,9 +315,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     expanded.AddRange(node.MessageContentList);
                 }
             }
-            catch (Exception) when (cancellationToken.IsCancellationRequested == false)
+            catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
             {
                 // 获取失败不中断整个请求，降级为文字标记。
+                logger.LogWarning("展开 Forward 消息失败：消息资源ID={ResourceId}，原因={Reason}", forward.ResourceId, exception.Message);
                 expanded.Add(new TextContent { Text = "[合并转发消息，获取失败]" });
             }
 
@@ -342,8 +346,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             {
                 await SendReplyAsync(requestId, groupMessage, "获取引用消息失败，请稍后再试", cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
+                logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);
                 return (false, exception.GetType().Name);
-                // logger.LogWarning("获取引用消息失败：消息ID={MessageId}，原因={Reason}", currentRefMessageId, exception.Message);
             }
 
             // 引用消息里同样可能包含合并转发，取回后先展开再转换。

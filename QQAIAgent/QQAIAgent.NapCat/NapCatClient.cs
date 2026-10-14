@@ -427,8 +427,17 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
                 message.MessageContentList.Add(ParseJsonCard(data));
                 break;
             case "forward":
-                // 合并转发内容需在处理阶段调 get_forward_msg 展开，这里只保留资源 ID。
-                message.MessageContentList.Add(new ForwardContent { ResourceId = data.GetProperty("id").ToString() });
+                {
+                    // 合并转发内容需在处理阶段展开，这里保留资源 ID；内层转发的节点内容会随 data.content 内联返回。
+                    var forwardContent = new ForwardContent { ResourceId = data.GetProperty("id").ToString() };
+                    if (data.TryGetProperty("content", out var innerNodes) && innerNodes.ValueKind == JsonValueKind.Array)
+                    {
+                        // 内层节点结构与群消息事件同构，直接按群消息解析，避免再调接口（内层 ID 会返回 retcode=1200）。
+                        forwardContent.InnerMessages.AddRange(innerNodes.EnumerateArray().Select(ParseGroupMessage));
+                    }
+
+                    message.MessageContentList.Add(forwardContent);
+                }
                 break;
             case "image":
                 message.MessageContentList.Add(new ImageContent
