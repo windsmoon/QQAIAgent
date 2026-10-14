@@ -40,7 +40,7 @@ public sealed class CheckContextRelevanceTool : ITool, IDisposable
 
         if (candidateList.Count == 0)
         {
-            throw new ArgumentException("contexts 至少需要一段候选上下文文本。", nameof(argumentsJson));
+            throw new ArgumentException("至少需要一段候选上下文文本。", nameof(argumentsJson));
         }
 
         // 仅在 Agent 调用工具时读取配置，不自动读取或筛选群历史消息。
