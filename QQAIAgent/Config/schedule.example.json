@@ -1,0 +1,31 @@
+{
+  "Enabled": true,
+  "TimeZone": "+8",
+  "Tasks": [
+    {
+      "Id": "daily-reminder",
+      "Enabled": true,
+      "GroupIds": [123456789],
+      "ScheduleType": "Daily",
+      "Time": "09:00",
+      "Text": "早上好，记得查看今天的任务。"
+    },
+    {
+      "Id": "weekly-meeting",
+      "Enabled": true,
+      "GroupIds": [123456789],
+      "ScheduleType": "Weekly",
+      "DaysOfWeek": ["Monday", "Friday"],
+      "Time": "18:00",
+      "Text": "会议将在半小时后开始。"
+    },
+    {
+      "Id": "event-reminder",
+      "Enabled": true,
+      "GroupIds": [123456789],
+      "ScheduleType": "Once",
+      "Date": "2026-10-20",
+      "Time": "19:30"
+    }
+  ]
+}
