@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using QQAIAgent.Abstractions.Tool;
@@ -295,6 +296,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
     private async Task AppendChatContentsAsync(List<ChatContent> chatContentList, List<MessageContent> messageContentList, long groupId, bool isReference, CancellationToken cancellationToken)
     {
+        var memberCards = new Dictionary<long, string>();
         foreach (var content in messageContentList)
         {
             switch (content)
@@ -338,10 +340,32 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     }
                     break;
                 case AtContent atContent:
-                    chatContentList.Add(new ChatTextContent
                     {
-                        Text = atContent.Target == "all" ? "@全体成员" : $"@{atContent.Target}"
-                    });
+                        var text = atContent.Target == "all" ? "@全体成员" : $"@{atContent.Target}";
+                        if (groupId > 0 && long.TryParse(atContent.Target, NumberStyles.None,
+                            CultureInfo.InvariantCulture, out var userId) && userId > 0)
+                        {
+                            if (memberCards.TryGetValue(userId, out var card) == false)
+                            {
+                                try
+                                {
+                                    card = await messageReader.GetGroupMemberCardAsync(groupId, userId, cancellationToken);
+                                    card = string.IsNullOrWhiteSpace(card) ? "未设置" : card;
+                                }
+                                catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
+                                {
+                                    logger.LogWarning(exception, "获取被 @ 成员群名片失败：群={GroupId}，QQ={UserId}", groupId, userId);
+                                    card = "获取失败";
+                                }
+
+                                memberCards[userId] = card;
+                            }
+
+                            text += $"（群名片：{card}）";
+                        }
+
+                        chatContentList.Add(new ChatTextContent { Text = text });
+                    }
                     break;
                 case FaceContent faceContent:
                     chatContentList.Add(new ChatTextContent

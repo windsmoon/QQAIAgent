@@ -116,6 +116,12 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return ReadOptionalString(data, "url");
     }
 
+    public async Task<string> GetGroupMemberCardAsync(long groupId, long userId, CancellationToken cancellationToken)
+    {
+        var data = await CallApiAsync("get_group_member_info", new { group_id = groupId, user_id = userId }, cancellationToken);
+        return ReadOptionalString(data, "card");
+    }
+
     public async Task WaitForDisconnectAsync(CancellationToken cancellationToken)
     {
         var receiveTask = _receiveTask ?? throw new InvalidOperationException("NapCat 尚未建立连接。");

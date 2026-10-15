@@ -9,5 +9,6 @@ public interface IMessageReader
     Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken);
     /// <summary>根据群号和群文件资源 ID 获取下载地址。</summary>
     Task<string> GetGroupFileUrlAsync(long groupId, string fileId, CancellationToken cancellationToken);
+    Task<string> GetGroupMemberCardAsync(long groupId, long userId, CancellationToken cancellationToken);
     #endregion
 }
