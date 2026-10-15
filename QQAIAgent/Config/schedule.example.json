@@ -3,32 +3,24 @@
   "TimeZone": "+8",
   "Tasks": [
     {
-      "Id": "daily-reminder",
+      "Id": "daily-good-morning",
       "Enabled": true,
-      "GroupIds": [123456789],
-      "ExcludedGroupIds": [],
-      "ScheduleType": "Daily",
-      "Time": "09:00",
-      "Text": "早上好，记得查看今天的任务。"
-    },
-    {
-      "Id": "weekly-meeting",
-      "Enabled": true,
-      "GroupIds": [123456789],
+      "GroupIds": [],
       "ExcludedGroupIds": [],
       "ScheduleType": "Weekly",
-      "DaysOfWeek": ["Monday", "Friday"],
-      "Time": "18:00",
-      "Text": "会议将在半小时后开始。"
+      "DaysOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+      "Time": "09:00",
+      "Text": "早安！新的一天开始啦，记得吃早餐，愿大家今天心情愉快，做事顺利！"
     },
     {
-      "Id": "event-reminder",
+      "Id": "daily-good-night",
       "Enabled": true,
-      "GroupIds": [123456789],
+      "GroupIds": [],
       "ExcludedGroupIds": [],
-      "ScheduleType": "Once",
-      "Date": "2026-10-20",
-      "Time": "19:30"
+      "ScheduleType": "Weekly",
+      "DaysOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+      "Time": "23:30",
+      "Text": "夜深啦，忙碌了一天辛苦了。放下手机，早点休息，愿大家今晚好梦，明天元气满满。晚安！"
     }
   ]
 }
