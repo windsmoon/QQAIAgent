@@ -4,6 +4,7 @@ namespace QQAIAgent.Abstractions.Tool;
 public sealed class ToolContext
 {
     #region properties
+    public long GroupId { get; set; }
     public ReasoningEffort ReasoningEffort { get; set; } = ReasoningEffort.Minimal;
     #endregion
 }

@@ -102,8 +102,11 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = chatContentList });
 
         // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
-        var toolContext = new ToolContext();
-        toolContext.ReasoningEffort = config.FirstReasoningEffort;
+        var toolContext = new ToolContext
+        {
+            GroupId = message.GroupId,
+            ReasoningEffort = config.FirstReasoningEffort
+        };
         var query = string.Concat(message.MessageContentList.OfType<TextContent>().Select(content => content.Text));
         var contextList = await ReadContextTextsAsync(message, refMessageIdResults, cancellationToken);
 

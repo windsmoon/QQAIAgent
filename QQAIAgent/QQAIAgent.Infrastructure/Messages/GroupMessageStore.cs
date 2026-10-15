@@ -7,7 +7,7 @@ using QQAIAgent.Messaging;
 namespace QQAIAgent.Infrastructure.Messages;
 
 /// <summary>只记录初始化时允许的群，每个群使用独立的 SQLite 文件。</summary>
-public sealed class GroupMessageStore(string directoryPath)
+public sealed partial class GroupMessageStore(string directoryPath)
 {
     #region fields
     private readonly Dictionary<long, IDatabase> _databases = [];

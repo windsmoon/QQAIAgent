@@ -28,7 +28,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 
 视频理解和上下文关联判断的 example、local 地址均使用北京地域业务空间的专属域名，需填写该空间对应的 API Key；更换业务空间时同步修改对应的 `Endpoint`。
 
-前五个 local 文件需要准备。模板默认允许主模型调用获取时间和调整思考强度，关闭联网搜索、网页读取、视频理解与上下文关联判断的模型工具入口；启用搜索或视频理解时再准备对应配置。上下文关联判断由 Agent 固定在首次 ChatRequest 前调用，需准备对应配置，其 example 和 local 文件显示在 Rider 的解决方案级 `Config` 文件夹下。
+前五个 local 文件需要准备。模板默认允许主模型调用获取时间、调整思考强度和群聊数据库查询，关闭联网搜索、网页读取、视频理解与上下文关联判断的模型工具入口；启用联网搜索或视频理解时再准备对应配置。上下文关联判断由 Agent 固定在首次 ChatRequest 前调用，需准备对应配置，其 example 和 local 文件显示在 Rider 的解决方案级 `Config` 文件夹下。
 
 ### Agent 配置
 
@@ -91,6 +91,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | --- | --- | --- | --- | --- |
 | `get_time` | `{}` | 开启 | 5 秒 | 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移 |
 | `set_reasoning_effort` | `{"effort":"high"}` | 开启 | 5 秒 | 调整本条请求下一轮模型调用的思考强度 |
+| `search_group_messages` | `{"keyword":"上线","limit":20}` | 开启 | 30 秒 | 通过固定只读接口查询当前群已记录的消息，支持组合筛选、分页和计数 |
 | `web_search` | `{"query":"搜索关键词"}` | 关闭 | 30 秒 | 通过腾讯云 SearchPro 搜索，返回查询词、结果、请求 ID 和服务提示 |
 | `fetch_web_page` | `{"url":"https://example.com"}` | 关闭 | 60 秒 | 读取 HTML 或纯文本，返回最终地址、标题和正文 |
 | `understand_video` | `{"url":"https://example.com/video.mp4","prompt":"总结视频中的关键事件"}` | 关闭 | 180 秒 | 通过阿里云百炼分析视频画面和声音，返回分析内容、模型、完成原因和 Token 用量 |
@@ -111,6 +112,26 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 每条新请求从 Agent 配置的 `FirstReasoningEffort` 思考强度开始，省略时默认使用 `Low`。工具支持 `minimal`、`low`、`medium`、`high`、`max`；未调整时沿用本条请求上一轮的强度，同轮多次有效设置以最后一次为准。当前 DeepSeek 映射为：`minimal` 关闭思考，`low` 使用 low，`medium/high` 使用 high，`max` 使用 max。不同请求的工具上下文互不共享。
 
 系统提示词全文作为系统消息发送，不渲染 Markdown。模板要求简体中文、简短自然的纯文本回复，允许按需求展开；格式由提示词引导，程序不按字数截断或删除 Markdown。
+
+### 群聊数据库查询
+
+`search_group_messages` 的工具描述明确说明数据库使用 **SQLite**，每个群独立存储。工具只调用 `IGroupMessageQuery.SearchAsync` / `CountAsync`，模型只能提交预定义参数，不能提交 SQL、表名、数据库路径或群号。群号由 Agent 的请求上下文提供，服务端仍会检查该群是否已初始化。已有部署需将 [tools.example.json](QQAIAgent/Config/tools.example.json) 中的新工具定义合并到自己的 `tools.local.json`，重新构建并重启宿主，无需新建额外配置。
+
+| 常用查询 | 参数示例 |
+| --- | --- |
+| 最近 20 条消息 | `{}` |
+| 正文包含关键词 | `{"keyword":"上线"}` |
+| 某人的消息 | `{"sender_id":123456789}` 或 `{"sender_name":"小明"}` |
+| 指定时间段，按时间正序 | `{"start_time":1791993600,"end_time":1792079999,"order":"asc"}` |
+| 组合筛选 | `{"keyword":"上线","sender_id":123456789,"start_time":1791993600}` |
+| 根据消息 ID 查找 | `{"message_id":12345}` |
+| 查找直接回复某条消息的记录 | `{"ref_message_id":12345}` |
+| 统计符合条件的记录数 | `{"operation":"count","sender_id":123456789}` |
+| 分页读取 | `{"limit":20,"offset":20}` |
+
+`operation` 默认 `search`，所有筛选条件取交集；时间为 Unix 秒，起止边界都包含。昵称/群名片按发送时保存的值做子串匹配，可能匹配多人。关键词按字面子串查找，不解释 SQL、通配符或正则；消息数组先解码 JSON 并拼接顶层 `text` 段，CQ 字符串解码 JSON 后保留 CQ 码；不展开合并转发，不检索图片/视频内容。未使用关键词筛选时也会返回无文本记录，`text` 可为空。只覆盖本地已记录的消息，重复上报按多条记录计数，不代表完整 QQ 历史。
+
+`search` 默认从新到旧排序，同秒按记录 ID 排序；`limit` 为 1–50，`offset` 为 0–10000。返回 `messages`、`returnedCount`、`hasMore` 和 `nextOffset`；每条消息包含记录 ID、消息 ID、发送时间、发送者、引用 ID 和文本，文本最多 2000 字符，`textTruncated` 表示截断，筛选仍匹配完整文本。查询期间新消息可能影响偏移分页，建议固定 `end_time`；超过分页上限应缩小时间范围。`count` 返回 `total`，不接受分页及排序参数。未知字段（包括 `sql`、`group_id`）、重复字段、无效操作和越界参数会被拒绝。
 
 ### 配置更新何时生效
 
@@ -215,7 +236,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 | `QQAIAgent.Messaging` | 群消息与内容类型、共用 JSON/CQ 消息解析、读取及发送接口 |
 | `QQAIAgent.NapCat` | NapCat WebSocket 与协议解析 |
 | `DeepSeek` | DeepSeek HTTP 模型适配 |
-| `QQAIAgent.Tools` | 六个内置工具的插件实现 |
+| `QQAIAgent.Tools` | 七个内置工具的插件实现 |
 | `Third` | 第三方程序的本地存放目录 |
 
 Host 直接注册 `DeepSeekChatModel` 为 `IChatModel` 单例；工具通过插件目录加载。当前插件契约见 [ITool.cs](QQAIAgent/QQAIAgent.Abstractions/Tool/ITool.cs)：

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using QQAIAgent.Abstractions.Messages;
 using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Config;
@@ -33,6 +34,7 @@ builder.Services.AddSingleton<ImageFileStore>();
 
 var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
 builder.Services.AddSingleton(new GroupMessageStore(messagesDirectoryPath));
+builder.Services.AddSingleton<IGroupMessageQuery>(services => services.GetRequiredService<GroupMessageStore>());
 builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
 var configDirectory = Path.Combine(AppContext.BaseDirectory, "Config");
