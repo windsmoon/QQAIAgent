@@ -25,21 +25,21 @@
     "TimeoutSeconds": 30,
     "Description": "通过联网搜索查询互联网信息，返回网页标题、摘要、来源地址和发布时间。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"搜索关键词或问题\"}},\"required\":[\"query\"]}",
-    "Enabled": false
+    "Enabled": true
   },
   {
     "Name": "fetch_web_page",
     "TimeoutSeconds": 60,
-    "Description": "获取 HTTP 或 HTTPS 网页的静态正文，返回最终地址、标题和正文。不执行 JavaScript。",
+    "Description": "获取 HTTP 或 HTTPS 网页的静态正文，返回最终地址、标题和正文。不执行 JavaScript。对同一地址 fetch_web_page 连续执行失败 2 次，就停止对其查询。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"需要获取内容的网页地址\"}},\"required\":[\"url\"]}",
-    "Enabled": false
+    "Enabled": true
   },
   {
     "Name": "understand_video",
     "TimeoutSeconds": 180,
     "Description": "通过阿里云百炼 Qwen3.8-Omni-Flash 理解视频画面和声音，按问题描述内容、总结事件、识别语音或定位关键时间点。仅支持百炼可直接访问的 HTTP/HTTPS 视频文件地址，不支持网页链接。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"百炼可直接访问的视频文件 HTTP/HTTPS 地址\"},\"prompt\":{\"type\":\"string\",\"description\":\"需要对视频回答的问题或执行的分析要求\"}},\"required\":[\"url\",\"prompt\"],\"additionalProperties\":false}",
-    "Enabled": false
+    "Enabled": true
   },
   {
     "Name": "check_context_relevance",
