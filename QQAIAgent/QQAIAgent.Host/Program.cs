@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Abstractions.Messages;
 using QQAIAgent.Agent;
@@ -15,6 +16,7 @@ using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
+using QQAIAgent.Schedule;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -54,8 +56,17 @@ var toolsConfigJson = File.ReadAllText(toolsConfigPath);
 var toolDefinitions = JsonSerializer.Deserialize<List<ChatToolDefinition>>(toolsConfigJson)
     ?? throw new InvalidDataException($"工具配置不能为 null：{toolsConfigPath}");
 
+var scheduleConfigPath = Path.Combine(configDirectory, "schedule.local.json");
+var scheduleConfigJson = File.ReadAllText(scheduleConfigPath);
+var scheduleJsonOptions = new JsonSerializerOptions();
+scheduleJsonOptions.Converters.Add(new JsonStringEnumConverter());
+var scheduleConfig = JsonSerializer.Deserialize<ScheduleConfig>(scheduleConfigJson, scheduleJsonOptions)
+    ?? throw new InvalidDataException($"定时任务配置不能为 null：{scheduleConfigPath}");
+
 builder.Services.AddSingleton(napCatConfig);
 builder.Services.AddSingleton(agentConfig);
+builder.Services.AddSingleton(scheduleConfig);
+builder.Services.AddSingleton<ScheduleService>();
 builder.Services.AddSingleton<IReadOnlyList<ChatToolDefinition>>(toolDefinitions);
 builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
