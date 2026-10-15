@@ -30,7 +30,7 @@
   {
     "Name": "fetch_web_page",
     "TimeoutSeconds": 60,
-    "Description": "获取 HTTP 或 HTTPS 网页的静态正文，返回最终地址、标题和正文。不执行 JavaScript。对同一地址 fetch_web_page 连续执行失败 2 次，就停止对其查询。",
+    "Description": "获取 HTTP 或 HTTPS 地址的 HTML、纯文本或 JSON 内容，返回最终地址、标题和正文。JSON 原始内容放在正文中，标题为空。不执行 JavaScript。对同一地址 fetch_web_page 连续执行失败 2 次，就停止对其查询。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"需要获取内容的网页地址\"}},\"required\":[\"url\"]}",
     "Enabled": true
   },

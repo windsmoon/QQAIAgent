@@ -34,7 +34,7 @@ public sealed class FetchWebPageTool : ITool, IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
     }
 
-    /// <summary>获取 HTTP/HTTPS 网页的静态正文，返回包含最终地址、标题和正文的 JSON。</summary>
+    /// <summary>获取 HTTP/HTTPS 地址的 HTML、纯文本或 JSON 内容，返回包含最终地址、标题和正文的 JSON。</summary>
     public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -53,9 +53,11 @@ public sealed class FetchWebPageTool : ITool, IDisposable
         var isHtml = mediaType is null ||
             string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase);
-        if (isHtml == false && string.Equals(mediaType, "text/plain", StringComparison.OrdinalIgnoreCase) == false)
+        var isJson = string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
+            (mediaType?.EndsWith("+json", StringComparison.OrdinalIgnoreCase) == true);
+        if (isHtml == false && isJson == false && string.Equals(mediaType, "text/plain", StringComparison.OrdinalIgnoreCase) == false)
         {
-            throw new NotSupportedException($"不支持的网页内容类型：{mediaType}。仅支持 HTML 和纯文本。");
+            throw new NotSupportedException($"不支持的网页内容类型：{mediaType}。仅支持 HTML、纯文本和 JSON。");
         }
 
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -85,6 +87,7 @@ public sealed class FetchWebPageTool : ITool, IDisposable
         }
         else
         {
+            // JSON 与纯文本保留原始正文，避免按 HTML 提取时丢失字段内容。
             using var reader = new StreamReader(stream, encoding);
             content = await reader.ReadToEndAsync(cancellationToken);
         }
