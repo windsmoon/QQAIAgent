@@ -115,7 +115,16 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 
 ### 群聊数据库查询
 
-`search_group_messages` 的工具描述明确说明数据库使用 **SQLite**，每个群独立存储。工具只调用 `IGroupMessageQuery.SearchAsync` / `CountAsync`，模型只能提交预定义参数，不能提交 SQL、表名、数据库路径或群号。群号由 Agent 的请求上下文提供，服务端仍会检查该群是否已初始化。已有部署需将 [tools.example.json](QQAIAgent/Config/tools.example.json) 中的新工具定义合并到自己的 `tools.local.json`，重新构建并重启宿主，无需新建额外配置。
+`search_group_messages` 的工具描述明确说明数据库使用 **SQLite**，每个群独立存储。工具只调用 `IGroupMessageQuery.SearchAsync` / `CountAsync`，模型只能提交预定义参数，不能提交 SQL、表名、数据库路径或群号。群号由 Agent 的请求上下文提供，服务端仍会检查该群是否已初始化。已有部署需将 [tools.example.json](QQAIAgent/Config/tools.example.json) 中的新工具定义合并到自己的 `tools.local.json`，重新构建并重启宿主，无需额外的查询配置文件或配置类。
+
+分页默认值和范围固定在代码中，`search_group_messages` 的 `ParametersJson.properties` 保留对应参数表，用于告知模型：
+
+| 参数 | `minimum` | `maximum` | `default` | 作用 |
+| --- | --- | --- | --- | --- |
+| `limit` | `1` | `50` | `20` | 单次查询最多返回的记录数 |
+| `offset` | `0` | `10000` | `0` | 跳过的记录数，`nextOffset` 也遵循此上限 |
+
+默认值和范围由查询工具直接使用固定数值，存储层同样校验分页范围，不读取 `ParametersJson` 来决定执行限制，也不需要独立配置类。`ParametersJson` 只描述参数；仅修改它不会改变实际查询限制。后续调整限制时，应修改代码并同步工具参数表。`count` 不受分页限制。
 
 | 常用查询 | 参数示例 |
 | --- | --- |
@@ -131,7 +140,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 
 `operation` 默认 `search`，所有筛选条件取交集；时间为 Unix 秒，起止边界都包含。昵称/群名片按发送时保存的值做子串匹配，可能匹配多人。关键词按字面子串查找，不解释 SQL、通配符或正则；消息数组先解码 JSON 并拼接顶层 `text` 段，CQ 字符串解码 JSON 后保留 CQ 码；不展开合并转发，不检索图片/视频内容。未使用关键词筛选时也会返回无文本记录，`text` 可为空。只覆盖本地已记录的消息，重复上报按多条记录计数，不代表完整 QQ 历史。
 
-`search` 默认从新到旧排序，同秒按记录 ID 排序；`limit` 为 1–50，`offset` 为 0–10000。返回 `messages`、`returnedCount`、`hasMore` 和 `nextOffset`；每条消息包含记录 ID、消息 ID、发送时间、发送者、引用 ID 和文本，文本最多 2000 字符，`textTruncated` 表示截断，筛选仍匹配完整文本。查询期间新消息可能影响偏移分页，建议固定 `end_time`；超过分页上限应缩小时间范围。`count` 返回 `total`，不接受分页及排序参数。未知字段（包括 `sql`、`group_id`）、重复字段、无效操作和越界参数会被拒绝。
+`search` 默认从新到旧排序，同秒按记录 ID 排序；`limit` 默认 20、允许 1–50，`offset` 默认 0、允许 0–10000，`nextOffset` 不超过 10000。返回 `messages`、`returnedCount`、`hasMore` 和 `nextOffset`；每条消息包含记录 ID、消息 ID、发送时间、发送者、引用 ID 和文本，文本最多 2000 字符，`textTruncated` 表示截断，筛选仍匹配完整文本。查询期间新消息可能影响偏移分页，建议固定 `end_time`；超过分页上限应缩小时间范围。`count` 返回 `total`，不接受分页及排序参数。未知字段（包括 `sql`、`group_id`）、重复字段、无效操作和越界参数会被拒绝。
 
 ### 配置更新何时生效
 
