@@ -6,6 +6,7 @@
       "Id": "daily-reminder",
       "Enabled": true,
       "GroupIds": [123456789],
+      "ExcludedGroupIds": [],
       "ScheduleType": "Daily",
       "Time": "09:00",
       "Text": "早上好，记得查看今天的任务。"
@@ -14,6 +15,7 @@
       "Id": "weekly-meeting",
       "Enabled": true,
       "GroupIds": [123456789],
+      "ExcludedGroupIds": [],
       "ScheduleType": "Weekly",
       "DaysOfWeek": ["Monday", "Friday"],
       "Time": "18:00",
@@ -23,6 +25,7 @@
       "Id": "event-reminder",
       "Enabled": true,
       "GroupIds": [123456789],
+      "ExcludedGroupIds": [],
       "ScheduleType": "Once",
       "Date": "2026-10-20",
       "Time": "19:30"

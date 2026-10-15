@@ -5,7 +5,10 @@ public class ScheduleTask
     #region properties
     public string Id { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
+    /// <summary>消息发送目标群；仅包含一个 -1 时表示 AgentConfig.AllowedGroups 中的所有群，空列表不发送。</summary>
     public List<long> GroupIds { get; set; } = [];
+    /// <summary>从发送目标中排除的群号，适用于指定群和所有群两种配置。</summary>
+    public List<long> ExcludedGroupIds { get; set; } = [];
     public ScheduleType ScheduleType { get; set; }
     /// <summary>全局固定 UTC 偏移下的执行时间，使用 24 小时制 HH:mm。</summary>
     public string Time { get; set; } = string.Empty;

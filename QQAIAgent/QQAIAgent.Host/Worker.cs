@@ -113,9 +113,18 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
 
     private async Task SendScheduledMessageAsync(ScheduleTask task, CancellationToken cancellationToken)
     {
-        foreach (var groupId in task.GroupIds)
+        // 仅单独配置 -1 时使用 AgentConfig 配置的允许群，排除列表对所有目标群生效。
+        var groupIds = task.GroupIds.Count == 1 && task.GroupIds[0] == -1
+            ? agentConfig.AllowedGroups
+            : task.GroupIds;
+        foreach (var groupId in groupIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (task.ExcludedGroupIds.Contains(groupId))
+            {
+                continue;
+            }
+
             try
             {
                 var messageId = await napCatClient.SendGroupMessageAsync(groupId, 0, task.Text,

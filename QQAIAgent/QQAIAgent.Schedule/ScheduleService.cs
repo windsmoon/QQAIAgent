@@ -238,6 +238,7 @@ public class ScheduleService
             Id = task.Id,
             Enabled = task.Enabled,
             GroupIds = [.. task.GroupIds],
+            ExcludedGroupIds = [.. task.ExcludedGroupIds],
             ScheduleType = task.ScheduleType,
             Time = task.Time,
             Date = task.Date,

@@ -14,7 +14,9 @@
 - `Time`：24 小时制 `HH:mm`，按全局 UTC 偏移解释。
 - `Date`：仅 `Once` 使用，格式为 `yyyy-MM-dd`。
 - `DaysOfWeek`：仅 `Weekly` 使用，例如 `["Monday", "Friday"]`；空列表表示没有执行日期。
-- `GroupIds`、`Text`：透传给业务回调的参数，调度器不发送消息；`Text` 可省略，默认为空字符串。
+- `GroupIds`：目标群号。仅 `[-1]` 表示 `AgentConfig.AllowedGroups` 中配置的所有群；空列表不发送，`-1` 与其他元素混合时不表示所有群。
+- `ExcludedGroupIds`：排除的群号列表，默认为空。先确定目标群，再跳过其中被排除的群；指定群和所有群两种配置均适用。
+- `Text`：消息内容，可省略，默认为空字符串。目标群、排除群和消息内容均透传给业务回调，调度器本身不发送消息。
 
 读取配置时注册 `JsonStringEnumConverter`，以支持 `DaysOfWeek` 中的星期名称：
 
