@@ -40,9 +40,9 @@ public sealed partial class GroupMessageStore : IGroupMessageQuery
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(filter);
         filter.Validate();
-        if (limit is < 1 or > 50 || offset is < 0 or > 10000)
+        if (limit < 1 || offset < 0 )
         {
-            throw new ArgumentException("limit 必须为 1 到 50，offset 必须为 0 到 10000。");
+            throw new ArgumentException("limit 必须为大于等于 1， offset 必须大于等于 0。");
         }
 
         var database = GetQueryDatabase(groupId);

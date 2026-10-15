@@ -78,9 +78,9 @@ public sealed class SearchGroupMessagesTool(IGroupMessageQuery messageQuery) : I
 
         var limit = ReadInteger(root, "limit") ?? 20;
         var offset = ReadInteger(root, "offset") ?? 0;
-        if (limit is < 1 or > 50 || offset is < 0 or > 10000)
+        if (limit is < 1 or > 200 || offset is < 0 or > 10000)
         {
-            throw new ArgumentException("limit 必须为 1 到 50，offset 必须为 0 到 10000。");
+            throw new ArgumentException("limit 必须为 1 到 200，offset 必须为 0 到 10000。");
         }
 
         var order = ReadString(root, "order") ?? "desc";
