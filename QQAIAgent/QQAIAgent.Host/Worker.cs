@@ -117,6 +117,7 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
         var groupIds = task.GroupIds.Count == 1 && task.GroupIds[0] == -1
             ? agentConfig.AllowedGroups
             : task.GroupIds;
+        var hasAttemptedSend = false;
         foreach (var groupId in groupIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -125,6 +126,13 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
                 continue;
             }
 
+            // 只在实际发送的目标群之间等待，首群和被排除的群不增加等待时间。
+            if (hasAttemptedSend)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(3, 11)), cancellationToken);
+            }
+
+            hasAttemptedSend = true;
             try
             {
                 var messageId = await napCatClient.SendGroupMessageAsync(groupId, 0, task.Text,
