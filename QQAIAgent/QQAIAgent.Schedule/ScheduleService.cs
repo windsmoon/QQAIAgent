@@ -175,11 +175,9 @@ public class ScheduleService
                     if (_entries.TryGetValue(id, out var current) && ReferenceEquals(current, entry))
                     {
                         var now = DateTimeOffset.UtcNow;
-                        // 系统时间回拨时，也不能再次安排已经领取过的同一轮次。
-                        var after = now > entry.NextExecution ? now : entry.NextExecution;
                         var nextExecution = entry.Task.ScheduleType == ScheduleType.Once
                             ? null
-                            : GetNextExecution(entry.Task, after);
+                            : GetNextExecution(entry.Task, now);
                         if (nextExecution.HasValue)
                         {
                             entry.NextExecution = nextExecution.Value;
