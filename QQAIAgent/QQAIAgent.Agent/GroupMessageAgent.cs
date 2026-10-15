@@ -81,6 +81,11 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         // 先展开正文里的合并转发，再按原顺序转换文本、图片和视频。
         await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken);
         var chatContentList = new List<ChatContent>();
+        var senderCard = string.IsNullOrWhiteSpace(message.SenderCard) ? "未设置" : message.SenderCard;
+        chatContentList.Add(new ChatTextContent
+        {
+            Text = $"当前请求用户信息：\nQQ 号：{message.SenderId}\n群名片：{senderCard}\n\n当前用户消息：\n"
+        });
         await AppendChatContentsAsync(chatContentList, message.MessageContentList, message.GroupId, isReference: false, cancellationToken);
         // 消息列表只属于本次请求，不与其他用户或后续请求共享上下文。
         var messages = new List<ChatMessage>();
