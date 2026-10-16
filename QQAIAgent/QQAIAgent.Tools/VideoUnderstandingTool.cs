@@ -43,18 +43,18 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         var prompt = arguments.RootElement.GetProperty("prompt").GetString();
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
 
-        // 缓存仅按 URL 区分，命中时复用已有解析结果，不再探测视频或调用模型。
-        var cachedResult = await _videoCache.TryGetAsync(url, cancellationToken);
-        if (cachedResult is not null)
-        {
-            return cachedResult;
-        }
-
         // 在实际调用时读取配置，未使用视频理解时不依赖此配置文件。
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "videounderstanding.local.json");
         var configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<VideoUnderstandingConfig>(configJson)
             ?? throw new InvalidDataException($"视频理解配置不能为 null：{configPath}");
+
+        // 缓存仅按 URL 区分，按配置过滤过期结果，命中时不再探测视频或调用模型。
+        var cachedResult = await _videoCache.TryGetAsync(url, config.CacheDurationSeconds, cancellationToken);
+        if (cachedResult is not null)
+        {
+            return cachedResult;
+        }
 
         // 在工具入口读取实际视频元数据，正文、引用、转发和直接 URL 调用共用输入限制。
         var metadata = await ReadVideoMetadataAsync(url, config.FfprobePath, cancellationToken);

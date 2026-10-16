@@ -7,5 +7,6 @@
   "MaxOutputTokens": 4096,
   "MaxVideoSizeMB": 100,
   "MaxVideoDurationSeconds": 180,
+  "CacheDurationSeconds": 2592000,
   "FfprobePath": "Third/FFmpeg/ffprobe.exe"
 }
