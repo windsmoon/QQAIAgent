@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using QQAIAgent.Abstractions.Tool;
+using QQAIAgent.Abstractions.Video;
 using QQAIAgent.Tools.Config;
 
 namespace QQAIAgent.Tools;
@@ -12,6 +13,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
 {
     #region fields
     private readonly HttpClient _httpClient;
+    private readonly IVideoCache _videoCache;
     #endregion
 
     #region properties
@@ -19,8 +21,9 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
     #endregion
 
     #region methods
-    public VideoUnderstandingTool()
+    public VideoUnderstandingTool(IVideoCache videoCache)
     {
+        _videoCache = videoCache;
         // 超时统一由工具执行器传入的 CancellationToken 控制。
         _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     }
@@ -39,6 +42,13 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
 
         var prompt = arguments.RootElement.GetProperty("prompt").GetString();
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+
+        // 缓存仅按 URL 区分，命中时复用已有解析结果，不再探测视频或调用模型。
+        var cachedResult = await _videoCache.TryGetAsync(url, cancellationToken);
+        if (cachedResult is not null)
+        {
+            return cachedResult;
+        }
 
         // 在实际调用时读取配置，未使用视频理解时不依赖此配置文件。
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "videounderstanding.local.json");
@@ -96,7 +106,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         var result = responseDocument.RootElement;
         var choice = result.GetProperty("choices")[0];
 
-        return JsonSerializer.Serialize(new
+        var resultJson = JsonSerializer.Serialize(new
         {
             url,
             prompt,
@@ -106,6 +116,8 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
             finishReason = choice.GetProperty("finish_reason").GetString(),
             usage = result.GetProperty("usage")
         });
+        await _videoCache.SaveAsync(url, resultJson, cancellationToken);
+        return resultJson;
     }
 
     public void Dispose()
