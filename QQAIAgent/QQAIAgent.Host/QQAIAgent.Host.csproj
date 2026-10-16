@@ -23,10 +23,26 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\Config\*.json" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\Config\*.md" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\..\Third\FFmpeg\**\*" TargetPath="Third\FFmpeg\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
+
+    <!-- JSON 只在解决方案的 Config 文件夹中引用，构建和发布时直接复制。 -->
+    <Target Name="CopyConfigJson" AfterTargets="Build">
+        <ItemGroup>
+            <ConfigJson Include="..\Config\*.json" />
+        </ItemGroup>
+        <Copy SourceFiles="@(ConfigJson)" DestinationFolder="$(TargetDir)Config" SkipUnchangedFiles="true">
+            <Output TaskParameter="CopiedFiles" ItemName="FileWrites" />
+        </Copy>
+    </Target>
+
+    <Target Name="PublishConfigJson" AfterTargets="Publish">
+        <ItemGroup>
+            <PublishConfigJsonFile Include="..\Config\*.json" />
+        </ItemGroup>
+        <Copy SourceFiles="@(PublishConfigJsonFile)" DestinationFolder="$(PublishDir)Config" SkipUnchangedFiles="true" />
+    </Target>
 
     <!-- 项目引用只负责构建插件，运行时从 Plugins 目录加载。 -->
     <Target Name="CollectToolPluginFiles" AfterTargets="ResolveProjectReferences" Condition="'@(ToolPluginAssembly)' != ''">
