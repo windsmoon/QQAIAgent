@@ -333,19 +333,21 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                             }
                         }
 
-                        string cacheKey = string.Empty;
-                        // 来源不完整的转发节点不借用外层消息身份，避免不同视频共用缓存。
-                        if (hasVideoUrl && videoContent.SourceGroupId != 0 && videoContent.SourceMessageId is long sourceMessageId)
+                        if (_videoCacheKeys.TryGetValue(videoUrl, out string cacheKey) == false)
                         {
-                            cacheKey = $"{videoContent.SourceGroupId}-{sourceMessageId}-{videoContent.VideoIndex}";
-                            // 相同 URL 重复出现时固定采用第一次出现的来源，保证本次请求内查询与写入一致。
-                            _videoCacheKeys.TryAdd(videoUrl, cacheKey);
+                            // 来源不完整的转发节点不借用外层消息身份，避免不同视频共用缓存。
+                            if (hasVideoUrl && videoContent.SourceGroupId != 0 && videoContent.SourceMessageId is long sourceMessageId)
+                            {
+                                cacheKey = $"{videoContent.SourceGroupId}-{sourceMessageId}-{videoContent.VideoIndex}";
+                                // 相同 URL 重复出现时固定采用第一次出现的来源，保证本次请求内查询与写入一致。
+                                _videoCacheKeys.TryAdd(videoUrl, cacheKey);
+                            }
                         }
 
                         chatContentList.Add(new ChatTextContent
                         {
                             Text = hasVideoUrl
-                                ? $"[视频]（地址：{videoUrl}；cache_key：{cacheKey}； 需要理解画面和声音时调用 understand_video 工具）"
+                                ? $"[视频]（地址：{videoUrl}；cache_key：{cacheKey ?? string.Empty}； 需要理解画面和声音时调用 understand_video 工具）"
                                 : "[视频：未提供 HTTP/HTTPS 视频地址，当前无法理解视频内容]"
                         });
                     }
