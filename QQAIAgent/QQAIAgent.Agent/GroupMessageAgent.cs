@@ -16,7 +16,6 @@ namespace QQAIAgent.Agent;
 public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
 {
     #region fields
-    public Dictionary<string, string> _videoCacheKeys = new();
     private readonly List<ChatToolDefinition> _enabledToolDefinitions = toolDefinitions.Where(tool => tool.Enabled).ToList();
     #endregion
     
@@ -333,15 +332,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                             }
                         }
 
-                        if (_videoCacheKeys.TryGetValue(videoUrl, out string cacheKey) == false)
+                        string cacheKey = string.Empty;
+                        if (hasVideoUrl && videoContent.SourceGroupId != 0 && videoContent.SourceMessageId is long sourceMessageId)
                         {
-                            // 来源不完整的转发节点不借用外层消息身份，避免不同视频共用缓存。
-                            if (hasVideoUrl && videoContent.SourceGroupId != 0 && videoContent.SourceMessageId is long sourceMessageId)
-                            {
-                                cacheKey = $"{videoContent.SourceGroupId}-{sourceMessageId}-{videoContent.VideoIndex}";
-                                // 相同 URL 重复出现时固定采用第一次出现的来源，保证本次请求内查询与写入一致。
-                                _videoCacheKeys.TryAdd(videoUrl, cacheKey);
-                            }
+                            cacheKey = $"{videoContent.SourceGroupId}-{sourceMessageId}-{videoContent.VideoIndex}";
                         }
 
                         chatContentList.Add(new ChatTextContent
