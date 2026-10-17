@@ -34,25 +34,18 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
         var url = arguments.RootElement.GetProperty("url").GetString() ?? "";
-        var cacheKey =  arguments.RootElement.GetProperty("cache_key").GetString() ?? "";
+        var cacheKey = arguments.RootElement.TryGetProperty("cache_key", out var cacheKeyElement)
+            ? cacheKeyElement.GetString() ?? ""
+            : "";
         // URL 只用于定位本次请求里的视频，持久缓存按原消息身份区分，不受下载签名变化影响。
         var hasCacheKey = string.IsNullOrWhiteSpace(cacheKey) == false;
         
-        if (hasCacheKey == false && (Uri.TryCreate(url, UriKind.Absolute, out var uri) == false ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)))
-        {
-            throw new ArgumentException("url 必须是 HTTP 或 HTTPS 视频地址。", nameof(argumentsJson));
-        }
-
-        var prompt = arguments.RootElement.GetProperty("prompt").GetString();
-        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-
         // 在实际调用时读取配置，未使用视频理解时不依赖此配置文件。
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "videounderstanding.local.json");
         var configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<VideoUnderstandingConfig>(configJson)
-            ?? throw new InvalidDataException($"视频理解配置不能为 null：{configPath}");
-        
+                     ?? throw new InvalidDataException($"视频理解配置不能为 null：{configPath}");
+
         if (hasCacheKey)
         {
             var cachedResult = await _videoCache.TryGetAsync(cacheKey, config.CacheDurationSeconds, cancellationToken);
@@ -61,6 +54,16 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
                 return cachedResult;
             }
         }
+        
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) == false ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException("url 必须是 HTTP 或 HTTPS 视频地址。", nameof(argumentsJson));
+        }
+
+        var prompt = arguments.RootElement.GetProperty("prompt").GetString();
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+
 
         // 在工具入口读取实际视频元数据，正文、引用、转发和直接 URL 调用共用输入限制。
         var metadata = await ReadVideoMetadataAsync(url, config.FfprobePath, cancellationToken);
