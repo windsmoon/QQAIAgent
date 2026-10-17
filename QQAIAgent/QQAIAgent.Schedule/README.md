@@ -10,6 +10,7 @@
 - `TimeZone`：固定 UTC 偏移字符串，例如 `+8`、`-5`、`+5:30`、`-3:30`，不应用夏令时。
 - `Tasks`：任务列表，每个任务由调用方绑定执行回调后注册。
 - `Id`：大小写敏感的唯一标识；相同 Id 会替换原来的待执行计划。
+- `FunctionName`：大小写敏感的任务实现名称，对应 `IScheduleHandler.FunctionName`，默认为 `send_group_message`。不同 Id 可以使用同一个实现。
 - `ScheduleType`：`Once`、`Daily` 或 `Weekly`。
 - `Time`：24 小时制 `HH:mm`，按全局 UTC 偏移解释。
 - `Date`：仅 `Once` 使用，格式为 `yyyy-MM-dd`。
@@ -39,7 +40,7 @@ static async Task RunScheduleAsync(
 
     foreach (var task in config.Tasks)
     {
-        // 实际接入时可根据 task.Id 选择业务方法，或绑定统一的消息发送方法。
+        // 独立使用类库时可以直接绑定回调；Host 按 FunctionName 绑定处理器。
         scheduler.AddOrUpdate(task, (current, token) =>
         {
             token.ThrowIfCancellationRequested();
@@ -91,8 +92,62 @@ scheduler.Remove("temporary-reminder");
 - 全局禁用时不注册任务，`RunAsync` 直接完成；单个任务禁用后重新注册会移除其待执行计划。
 - 不持久化任务和执行记录。进程重启后动态任务丢失，配置任务需要重新加载并注册。
 
-Host 启动时读取运行目录下的 `Config/schedule.local.json`，NapCat 连接并核验账号成功后注册任务、启动调度。配置任务目前统一向 `GroupIds` 中的群发送 `Text`，不引用消息、不艾特用户；未填写消息内容时跳过注册。单个群发送失败不会阻止其他目标群发送。
+Host 启动时读取运行目录下的 `Config/schedule.local.json`，加载插件并以 `FunctionName` 为 key 建立处理器字典，NapCat 连接并核验账号成功后按配置绑定处理器、启动调度。启用的任务引用未加载的实现时启动失败；禁用的任务不查找实现。内置 `send_group_message` 向 `GroupIds` 中的群发送 `Text`，不引用消息、不艾特用户；消息内容为空时直接结束本次执行。其他处理器不受 `Text` 是否为空影响。单个群发送失败不会阻止其他目标群发送。
 
-同一任务按目标群顺序发送。首个未被排除的群直接发送，后续每个目标群在上一次发送尝试结束后随机等待 3～10 秒（含两端）；被排除的群不增加等待，最后一群发送后不额外等待。等待期间响应取消。
+内置群消息处理器按目标群顺序发送。首个未被排除的群直接发送，后续每个目标群在上一次发送尝试结束后随机等待 3～10 秒（含两端）；被排除的群不增加等待，最后一群发送后不额外等待。等待期间响应取消。
 
-配置使用 `TimeZone` 表示固定 UTC 偏移。修改本地配置后需重启程序；配置文件随 Host 构建和发布复制到运行目录。退出时只停止调度并通知取消，不等待已派发的发送回调结束。
+配置使用 `TimeZone` 表示固定 UTC 偏移。修改本地配置后需重启程序；配置文件随 Host 构建和发布复制到运行目录。退出时只停止调度并通知取消，不等待已派发的任务回调结束。
+
+## 外部定时任务插件
+
+外部类库以 .NET 10 为目标框架，开启 `EnableDynamicLoading`，引用与宿主一致的 `QQAIAgent.Schedule`，并公开实现 `IScheduleHandler` 的非抽象、非开放泛型类。每个实现提供固定的 `FunctionName` 和 `ExecuteAsync`；业务依赖通过构造函数注入，不需要在 Host 中逐个注册外部类。
+
+例如，以下处理器使用宿主提供的日志服务，执行时记录配置中的文本。插件项目还需引用与宿主一致的 `Microsoft.Extensions.Logging.Abstractions`：
+
+```csharp
+using Microsoft.Extensions.Logging;
+using QQAIAgent.Schedule;
+
+public sealed class LogScheduleHandler(ILogger<LogScheduleHandler> logger) : IScheduleHandler
+{
+    public string FunctionName => "log_schedule";
+
+    public Task ExecuteAsync(ScheduleTask task, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        logger.LogInformation("定时任务执行：任务={TaskId}，内容={Text}", task.Id, task.Text);
+        return Task.CompletedTask;
+    }
+}
+```
+
+将插件输出及其依赖放到运行目录下，子目录名称必须与入口 DLL 名称一致：
+
+```text
+Plugins/
+  MySchedules/
+    MySchedules.dll
+    MySchedules.deps.json
+    其他依赖.dll
+```
+
+在 `Config/schedule.local.json` 的 `Tasks` 中添加对应计划，例如：
+
+```json
+{
+  "Id": "monday-log",
+  "FunctionName": "log_schedule",
+  "Enabled": true,
+  "ScheduleType": "Weekly",
+  "DaysOfWeek": ["Monday"],
+  "Time": "09:00",
+  "Text": "本周任务开始"
+}
+```
+
+- 统一加载器每个插件入口 DLL 只加载一次，同时发现 Tool 和定时任务实现；一个 DLL 可以包含多个实现，两类实现的名称空间互相独立。
+- 处理器通过 DI 创建为单例，启动时构建 `FunctionName` 字典。重复名称（包括与内置处理器重名）会导致启动失败，不覆盖已注册实现。
+- 加载上下文共享宿主的 `QQAIAgent.Abstractions`、`QQAIAgent.Schedule`、`QQAIAgent.Messaging` 和日志抽象程序集。插件可以注入宿主已注册的公共服务，例如 `IMessageSender`、`IGroupMessageQuery`、`ILogger<T>`；新增的插件私有业务依赖不会自动注册。
+- 同一实例可能被不同 Id 的任务并发调用，每次执行的临时状态应保存在方法局部变量中，并响应传入的取消令牌。
+- 插件与配置在启动时加载，更换 DLL 或修改配置后需要重启；不支持热加载。
+- 直接使用 `ScheduleService.AddOrUpdate` 时仍可传入任意回调，`FunctionName` 只是任务数据，调度器本身不查找插件。

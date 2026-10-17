@@ -236,6 +236,7 @@ public class ScheduleService
         return new ScheduleTask
         {
             Id = task.Id,
+            FunctionName = task.FunctionName,
             Enabled = task.Enabled,
             GroupIds = [.. task.GroupIds],
             ExcludedGroupIds = [.. task.ExcludedGroupIds],

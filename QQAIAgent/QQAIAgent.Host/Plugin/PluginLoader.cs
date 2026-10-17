@@ -1,11 +1,12 @@
 using QQAIAgent.Abstractions.Tool;
+using QQAIAgent.Schedule;
 
 namespace QQAIAgent.Host.Plugin;
 
-internal static class ToolPluginLoader
+internal static class PluginLoader
 {
     #region methods
-    public static void RegisterTools(IServiceCollection services, string pluginsDirectory)
+    public static void RegisterPlugins(IServiceCollection services, string pluginsDirectory)
     {
         if (Directory.Exists(pluginsDirectory) == false)
         {
@@ -21,19 +22,26 @@ internal static class ToolPluginLoader
                 continue;
             }
 
-            var loadContext = new ToolPluginLoadContext(pluginPath);
+            var loadContext = new PluginLoadContext(pluginPath);
             var assembly = loadContext.LoadFromAssemblyPath(pluginPath);
 
-            // 一个插件程序集可以包含多个工具，依赖 DLL 由加载上下文解析，不作为入口扫描。
+            // 一个插件程序集可以包含多个工具和定时任务，依赖 DLL 由加载上下文解析，不作为入口扫描。
             foreach (var type in assembly.GetExportedTypes())
             {
-                if (type.IsClass == false || type.IsAbstract || type.ContainsGenericParameters ||
-                    typeof(ITool).IsAssignableFrom(type) == false)
+                if (type.IsClass == false || type.IsAbstract || type.ContainsGenericParameters)
                 {
                     continue;
                 }
 
-                services.AddSingleton(typeof(ITool), type);
+                if (typeof(ITool).IsAssignableFrom(type))
+                {
+                    services.AddSingleton(typeof(ITool), type);
+                }
+
+                if (typeof(IScheduleHandler).IsAssignableFrom(type))
+                {
+                    services.AddSingleton(typeof(IScheduleHandler), type);
+                }
             }
         }
     }

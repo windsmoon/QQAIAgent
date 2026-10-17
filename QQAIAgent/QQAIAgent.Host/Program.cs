@@ -11,6 +11,7 @@ using QQAIAgent.DeepSeek;
 using QQAIAgent.Host;
 using QQAIAgent.Host.Logging;
 using QQAIAgent.Host.Plugin;
+using QQAIAgent.Host.Schedule;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Messages;
@@ -76,7 +77,10 @@ builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
-ToolPluginLoader.RegisterTools(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
+PluginLoader.RegisterPlugins(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
+builder.Services.AddSingleton<IScheduleHandler, SendGroupMessageHandler>();
+builder.Services.AddSingleton<IReadOnlyDictionary<string, IScheduleHandler>>(services =>
+    services.GetServices<IScheduleHandler>().ToDictionary(handler => handler.FunctionName, StringComparer.Ordinal));
 builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(), services.GetRequiredService<IMessageReader>(),

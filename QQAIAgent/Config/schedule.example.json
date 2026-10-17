@@ -4,6 +4,7 @@
   "Tasks": [
     {
       "Id": "daily-good-morning",
+      "FunctionName": "SendGroupMessage",
       "Enabled": true,
       "GroupIds": [],
       "ExcludedGroupIds": [],
@@ -14,6 +15,7 @@
     },
     {
       "Id": "daily-good-night",
+      "FunctionName": "SendGroupMessage",
       "Enabled": true,
       "GroupIds": [],
       "ExcludedGroupIds": [],

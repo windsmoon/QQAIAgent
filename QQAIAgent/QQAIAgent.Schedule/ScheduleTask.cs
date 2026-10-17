@@ -4,6 +4,8 @@ public class ScheduleTask
 {
     #region properties
     public string Id { get; set; } = string.Empty;
+    /// <summary>任务实现的名称，默认使用内置群文本消息处理器。</summary>
+    public string FunctionName { get; set; } = "";
     public bool Enabled { get; set; } = true;
     /// <summary>消息发送目标群；仅包含一个 -1 时表示 AgentConfig.AllowedGroups 中的所有群，空列表不发送。</summary>
     public List<long> GroupIds { get; set; } = [];
