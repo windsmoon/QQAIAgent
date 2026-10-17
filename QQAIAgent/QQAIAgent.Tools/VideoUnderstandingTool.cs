@@ -34,8 +34,12 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
         var url = arguments.RootElement.GetProperty("url").GetString() ?? "";
-        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) == false ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        var cacheKey =  arguments.RootElement.GetProperty("cache_key").GetString() ?? "";
+        // URL 只用于定位本次请求里的视频，持久缓存按原消息身份区分，不受下载签名变化影响。
+        var hasCacheKey = string.IsNullOrWhiteSpace(cacheKey) == false;
+        
+        if (hasCacheKey == false && (Uri.TryCreate(url, UriKind.Absolute, out var uri) == false ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)))
         {
             throw new ArgumentException("url 必须是 HTTP 或 HTTPS 视频地址。", nameof(argumentsJson));
         }
@@ -48,12 +52,14 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         var configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<VideoUnderstandingConfig>(configJson)
             ?? throw new InvalidDataException($"视频理解配置不能为 null：{configPath}");
-
-        // 缓存仅按 URL 区分，按配置过滤过期结果，命中时不再探测视频或调用模型。
-        var cachedResult = await _videoCache.TryGetAsync(url, config.CacheDurationSeconds, cancellationToken);
-        if (cachedResult is not null)
+        
+        if (hasCacheKey)
         {
-            return cachedResult;
+            var cachedResult = await _videoCache.TryGetAsync(cacheKey, config.CacheDurationSeconds, cancellationToken);
+            if (cachedResult is not null)
+            {
+                return cachedResult;
+            }
         }
 
         // 在工具入口读取实际视频元数据，正文、引用、转发和直接 URL 调用共用输入限制。
@@ -116,7 +122,10 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
             finishReason = choice.GetProperty("finish_reason").GetString(),
             usage = result.GetProperty("usage")
         });
-        await _videoCache.SaveAsync(url, resultJson, cancellationToken);
+        if (hasCacheKey)
+        {
+            await _videoCache.SaveAsync(cacheKey, resultJson, cancellationToken);
+        }
         return resultJson;
     }
 

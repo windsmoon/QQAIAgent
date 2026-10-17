@@ -16,6 +16,7 @@ namespace QQAIAgent.Agent;
 public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
 {
     #region fields
+    public Dictionary<string, string> _videoCacheKeys = new();
     private readonly List<ChatToolDefinition> _enabledToolDefinitions = toolDefinitions.Where(tool => tool.Enabled).ToList();
     #endregion
     
@@ -78,6 +79,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
     private async Task<(long? MessageId, string Status, string ErrorType)> HandleRequestAsync(GroupMessage message, string requestId, CancellationToken cancellationToken)
     {
+        // 工具上下文同时保存正文和引用视频的来源，缓存键由程序生成，不交给模型拼接。
+        // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
+        var toolContext = new ToolContext
+        {
+            GroupId = message.GroupId,
+            ReasoningEffort = config.FirstReasoningEffort
+        };
         // 消息接收端已筛选出需要处理的消息，并移除了触发标记。
         // 先展开正文里的合并转发，再按原顺序转换文本、图片和视频。
         await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken);
@@ -107,12 +115,6 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = chatContentList });
 
-        // 强度只属于本条用户消息；工具未调整时沿用上一轮，不影响其他并发请求。
-        var toolContext = new ToolContext
-        {
-            GroupId = message.GroupId,
-            ReasoningEffort = config.FirstReasoningEffort
-        };
         var query = string.Concat(message.MessageContentList.OfType<TextContent>().Select(content => content.Text));
         var contextList = await ReadContextTextsAsync(message, refMessageIdResults, cancellationToken);
 
@@ -331,10 +333,19 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                             }
                         }
 
+                        string cacheKey = string.Empty;
+                        // 来源不完整的转发节点不借用外层消息身份，避免不同视频共用缓存。
+                        if (hasVideoUrl && videoContent.SourceGroupId != 0 && videoContent.SourceMessageId is long sourceMessageId)
+                        {
+                            cacheKey = $"{videoContent.SourceGroupId}-{sourceMessageId}-{videoContent.VideoIndex}";
+                            // 相同 URL 重复出现时固定采用第一次出现的来源，保证本次请求内查询与写入一致。
+                            _videoCacheKeys.TryAdd(videoUrl, cacheKey);
+                        }
+
                         chatContentList.Add(new ChatTextContent
                         {
                             Text = hasVideoUrl
-                                ? $"[视频]（地址：{videoUrl}；需要理解画面和声音时调用 understand_video 工具）"
+                                ? $"[视频]（地址：{videoUrl}；cache_key：{cacheKey}； 需要理解画面和声音时调用 understand_video 工具）"
                                 : "[视频：未提供 HTTP/HTTPS 视频地址，当前无法理解视频内容]"
                         });
                     }

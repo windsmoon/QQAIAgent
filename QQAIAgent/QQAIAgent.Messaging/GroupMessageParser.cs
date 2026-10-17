@@ -135,6 +135,8 @@ public static class GroupMessageParser
                     File = data.GetProperty("file").GetString() ?? "",
                     FileId = type == "file" ? ReadOptionalString(data, "file_id") : "",
                     SourceGroupId = message.GroupId,
+                    SourceMessageId = message.MessageId,
+                    VideoIndex = message.MessageContentList.OfType<VideoContent>().Count(),
                     Url = ReadOptionalString(data, "url"),
                     FileSize = data.TryGetProperty("file_size", out var videoFileSize) && videoFileSize.ValueKind != JsonValueKind.Null
                         ? ReadMessageInteger(videoFileSize)

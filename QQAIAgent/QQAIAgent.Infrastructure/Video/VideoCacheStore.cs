@@ -16,43 +16,43 @@ public sealed class VideoCacheStore(string directoryPath) : IVideoCache
         Directory.CreateDirectory(directoryPath);
         var connectionString = new SqliteConnectionStringBuilder
         {
-            DataSource = Path.Combine(directoryPath, "VideoCache.sqlite3")
+            DataSource = Path.Combine(directoryPath, "VideoMessageCache.sqlite3")
         }.ToString();
         _database = new SqliteDatabase(connectionString);
         await _database.ExecuteAsync("""
             CREATE TABLE IF NOT EXISTS video_cache (
-                url TEXT NOT NULL PRIMARY KEY,
+                cache_key TEXT NOT NULL PRIMARY KEY,
                 result_json TEXT NOT NULL,
                 record_time INTEGER NOT NULL
             );
             """, cancellationToken: cancellationToken);
     }
 
-    public Task<string> TryGetAsync(string url, long? cacheDurationSeconds, CancellationToken cancellationToken)
+    public Task<string> TryGetAsync(string cacheKey, long? cacheDurationSeconds, CancellationToken cancellationToken)
     {
         return _database.ExecuteScalarAsync<string>("""
             SELECT result_json FROM video_cache
-            WHERE url = @Url
+            WHERE cache_key = @CacheKey
                 AND (@CacheDurationSeconds IS NULL OR record_time + @CacheDurationSeconds > @CurrentTime);
             """, new
         {
-            Url = url,
+            CacheKey = cacheKey,
             CacheDurationSeconds = cacheDurationSeconds,
             CurrentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         }, cancellationToken);
     }
 
-    public Task SaveAsync(string url, string resultJson, CancellationToken cancellationToken)
+    public Task SaveAsync(string cacheKey, string resultJson, CancellationToken cancellationToken)
     {
         return _database.ExecuteAsync("""
-            INSERT INTO video_cache (url, result_json, record_time)
-            VALUES (@Url, @ResultJson, @RecordTime)
-            ON CONFLICT(url) DO UPDATE SET
+            INSERT INTO video_cache (cache_key, result_json, record_time)
+            VALUES (@CacheKey, @ResultJson, @RecordTime)
+            ON CONFLICT(cache_key) DO UPDATE SET
                 result_json = excluded.result_json,
                 record_time = excluded.record_time;
             """, new
         {
-            Url = url,
+            CacheKey = cacheKey,
             ResultJson = resultJson,
             // 使用 UTC Unix 秒记录本次写入时间，用于判断缓存是否过期。
             RecordTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
