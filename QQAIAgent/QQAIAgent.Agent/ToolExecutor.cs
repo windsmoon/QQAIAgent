@@ -7,7 +7,7 @@ using QQAIAgent.Agent.Statistics;
 
 namespace QQAIAgent.Agent;
 
-public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToolDefinition> toolDefinitions, RequestStatistics statistics, ILogger<ToolExecutor> logger)
+public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, ChatToolDefinition> toolDefinitions, RequestStatistics statistics, ILogger<ToolExecutor> logger)
 {
     #region methods
     /// <summary>按顺序执行工具调用；Agent 的前置调用不受主模型启用状态限制，调用失败以结果文本返回，请求取消继续抛出。</summary>
@@ -23,18 +23,15 @@ public sealed class ToolExecutor(IEnumerable<ITool> tools, IReadOnlyList<ChatToo
             using var toolScope = logger.BeginScope("工具={ToolName}，调用ID={ToolCallId}", toolCall.Name, toolCall.Id);
 
             string content;
-            var toolDefinition = toolDefinitions.FirstOrDefault(definition =>
-                (isPreprocessing || definition.Enabled) && definition.Name == toolCall.Name);
-            if (toolDefinition is null)
+            if (toolDefinitions.TryGetValue(toolCall.Name, out var toolDefinition) == false ||
+                (isPreprocessing == false && toolDefinition.Enabled == false))
             {
                 content = $"工具未启用或未配置：{toolCall.Name}";
                 logger.LogWarning("工具调用已跳过：{Reason}", content);
             }
             else
             {
-                // TODO 用 Dictionary
-                var tool = tools.FirstOrDefault(candidate => candidate.Name == toolCall.Name);
-                if (tool is null)
+                if (tools.TryGetValue(toolCall.Name, out var tool) == false)
                 {
                     content = $"未加载工具实现：{toolCall.Name}";
                     logger.LogWarning("工具调用已跳过：{Reason}", content);
