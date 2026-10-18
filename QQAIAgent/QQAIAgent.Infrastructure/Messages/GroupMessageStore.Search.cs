@@ -86,6 +86,34 @@ public sealed partial class GroupMessageStore : IGroupMessageQuery
             filter, cancellationToken);
     }
 
+    /// <summary>按时间范围分页读取完整文本，用于总结；起止时间均为包含边界的 Unix 秒，按时间和记录 Id 升序返回。</summary>
+    public Task<List<GroupMessageSearchItem>> GetMessagesInTimeRangeAsync(long groupId, long startTime, long endTime,
+        int limit, int offset, CancellationToken cancellationToken)
+    {
+        var database = GetQueryDatabase(groupId);
+        var filter = new GroupMessageFilter { StartTime = startTime, EndTime = endTime };
+        // 搜索工具的正文预览会截断到 2000 字，总结需要读取完整正文。
+        return database.QueryAsync<GroupMessageSearchItem>(FilteredMessagesSql + """
+
+            SELECT id AS RecordId, message_id AS MessageId, message_time AS MessageTime,
+                sender_id AS SenderId, sender_nickname AS SenderNickname, sender_card AS SenderCard,
+                ref_message_id AS RefMessageId, message_text AS Text
+            FROM filtered_messages
+            ORDER BY message_time ASC, id ASC
+            LIMIT @Count OFFSET @Offset;
+            """, new
+        {
+            filter.SenderId,
+            filter.SenderName,
+            filter.StartTime,
+            filter.EndTime,
+            filter.MessageId,
+            filter.RefMessageId,
+            Count = limit,
+            Offset = offset
+        }, cancellationToken);
+    }
+
     private IDatabase GetQueryDatabase(long groupId)
     {
         if (groupId <= 0 || _databases.TryGetValue(groupId, out var database) == false)

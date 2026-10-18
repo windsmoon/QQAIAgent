@@ -50,14 +50,28 @@ public class ScheduleService
                 _entries.Remove(snapshot.Id);
             }
         }
+
+        if (snapshot.ScheduleType == ScheduleType.Once && nextExecution.HasValue == false)
+        {
+            _logger.LogWarning("单次定时任务已过期，跳过注册：任务={TaskId}，执行日期={Date}，执行时间={Time}，UTC偏移={UtcOffset}",
+                snapshot.Id, snapshot.Date, snapshot.Time, _utcOffset);
+        }
     }
 
     /// <summary>注册或替换动态单次任务，以 executeAt 为准，忽略传入模型的类型、日期和时间。</summary>
     public void AddOrUpdate(ScheduleTask task, DateTimeOffset executeAt, Func<ScheduleTask, CancellationToken, Task> action)
     {
-        if (_enabled == false || task.Enabled == false || executeAt <= DateTimeOffset.UtcNow)
+        if (_enabled == false || task.Enabled == false)
         {
             Remove(task.Id);
+            return;
+        }
+
+        if (executeAt <= DateTimeOffset.UtcNow)
+        {
+            Remove(task.Id);
+            _logger.LogWarning("单次定时任务已过期，跳过注册：任务={TaskId}，执行时间={ExecuteAt:yyyy-MM-dd HH:mm:ss zzz}",
+                task.Id, executeAt.ToOffset(_utcOffset));
             return;
         }
 

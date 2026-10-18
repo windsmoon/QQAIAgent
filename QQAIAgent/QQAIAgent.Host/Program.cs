@@ -82,6 +82,7 @@ builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredSe
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
 PluginLoader.RegisterPlugins(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
 builder.Services.AddSingleton<IScheduleHandler, SendGroupMessageHandler>();
+builder.Services.AddSingleton<IScheduleHandler, SummarizeGroupMessagesHandler>();
 builder.Services.AddSingleton<IReadOnlyDictionary<string, ITool>>(services =>
     services.GetServices<ITool>().ToDictionary(tool => tool.Name, StringComparer.Ordinal));
 builder.Services.AddSingleton<IReadOnlyDictionary<string, IScheduleHandler>>(services =>

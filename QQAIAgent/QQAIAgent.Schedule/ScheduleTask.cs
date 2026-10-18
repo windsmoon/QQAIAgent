@@ -18,7 +18,7 @@ public class ScheduleTask
     public string Date { get; set; } = string.Empty;
     /// <summary>每周任务执行的星期；读取 JSON 时需注册 JsonStringEnumConverter。</summary>
     public List<DayOfWeek> DaysOfWeek { get; set; } = [];
-    /// <summary>传给业务回调的消息内容，可省略；调度器不负责发送消息。</summary>
+    /// <summary>传给业务回调的文本；发送消息任务用作消息正文，总结任务用作提示词；调度器不解释内容。</summary>
     public string Text { get; set; } = string.Empty;
     #endregion
 }
