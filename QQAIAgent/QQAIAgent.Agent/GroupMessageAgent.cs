@@ -506,8 +506,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             GroupMessage refMessage;
             try
             {
-                // 在处理阶段读取引用，接收循环必须保持运行才能返回 get_msg 的响应。
-                refMessage = await messageReader.GetGroupMessageAsync(currentRefMessageId, cancellationToken);
+                // 每层引用都优先读取当前群的本地记录，未命中时再请求 NapCat。
+                refMessage = await groupMessageStore.GetMessageAsync(groupMessage.GroupId, currentRefMessageId, cancellationToken);
+                if (refMessage is null)
+                {
+                    // 在处理阶段读取引用，接收循环必须保持运行才能返回 get_msg 的响应。
+                    refMessage = await messageReader.GetGroupMessageAsync(currentRefMessageId, cancellationToken);
+                }
             }
             catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
             {

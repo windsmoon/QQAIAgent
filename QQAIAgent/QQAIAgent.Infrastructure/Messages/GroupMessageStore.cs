@@ -77,6 +77,31 @@ public sealed partial class GroupMessageStore(string directoryPath)
         }, cancellationToken);
     }
 
+    /// <summary>按群号和消息 ID 读取并还原消息，未找到时返回 null。</summary>
+    public async Task<GroupMessage> GetMessageAsync(long groupId, long messageId, CancellationToken cancellationToken)
+    {
+        var database = _databases[groupId];
+        var messages = await database.QueryAsync<GroupMessage>("""
+            SELECT @GroupId AS GroupId, message_id AS MessageId, message_time AS MessageTime,
+                sender_id AS SenderId, sender_nickname AS SenderNickname,
+                sender_card AS SenderCard, sub_type AS SubType,
+                content_json AS ContentJson, ref_message_id AS RefMessageId
+            FROM messages
+            WHERE message_id = @MessageId
+            ORDER BY id DESC
+            LIMIT 1;
+            """, new { GroupId = groupId, MessageId = messageId }, cancellationToken);
+        var message = messages.FirstOrDefault();
+        if (message is null)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(message.ContentJson);
+        GroupMessageParser.ParseMessageContents(message, document.RootElement);
+        return message;
+    }
+
     /// <summary>读取并还原截至当前消息发送时刻的最近群消息，排除当前消息；数量限制在引用和正文类型过滤之前应用。</summary>
     public async Task<List<GroupMessage>> GetRecentMessagesAsync(long groupId, long? currentMessageId, long? currentMessageTime, int count, CancellationToken cancellationToken)
     {
