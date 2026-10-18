@@ -36,7 +36,7 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
-builder.Services.AddSingleton<ImageFileStore>();
+builder.Services.AddSingleton(new ImageFileStore(Path.Combine(AppContext.BaseDirectory, "Data")));
 builder.Services.AddSingleton(new VideoCacheStore(Path.Combine(AppContext.BaseDirectory, "Data")));
 builder.Services.AddSingleton<IVideoCache>(services => services.GetRequiredService<VideoCacheStore>());
 
@@ -97,6 +97,10 @@ builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAge
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
+#region temp
+// 图片缓存已改用独立数据库，删除主数据库中的旧表。
+await host.Services.GetRequiredService<IDatabase>().ExecuteAsync("DROP TABLE IF EXISTS image_files;", cancellationToken: CancellationToken.None);
+#endregion
 await host.Services.GetRequiredService<RequestStatistics>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<ImageFileStore>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<VideoCacheStore>().InitializeAsync(CancellationToken.None);

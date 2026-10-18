@@ -1,13 +1,24 @@
+using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
 
 namespace QQAIAgent.Infrastructure.Image;
 
-public sealed class ImageFileStore(IDatabase database)
+public sealed class ImageFileStore(string directoryPath)
 {
+    #region fields
+    private IDatabase _database;
+    #endregion
+
     #region methods
-    public Task InitializeAsync(CancellationToken cancellationToken)
+    public async Task InitializeAsync(CancellationToken cancellationToken)
     {
-        return database.ExecuteAsync("""
+        Directory.CreateDirectory(directoryPath);
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(directoryPath, "ImageMessageCache.sqlite3")
+        }.ToString();
+        _database = new SqliteDatabase(connectionString);
+        await _database.ExecuteAsync("""
             CREATE TABLE IF NOT EXISTS image_files (
                 storage_source TEXT NOT NULL,
                 cache_key TEXT NOT NULL,
@@ -21,7 +32,7 @@ public sealed class ImageFileStore(IDatabase database)
 
     public Task<string> FindValidFileIdAsync(string storageSource, string cacheKey, CancellationToken cancellationToken)
     {
-        return database.ExecuteScalarAsync<string>("""
+        return _database.ExecuteScalarAsync<string>("""
             SELECT file_id FROM image_files
             WHERE storage_source = @StorageSource AND cache_key = @CacheKey
                 AND record_time + storage_duration_seconds > @CurrentTime;
@@ -35,7 +46,7 @@ public sealed class ImageFileStore(IDatabase database)
             throw new ArgumentOutOfRangeException(nameof(storageDuration));
         }
 
-        return database.ExecuteAsync("""
+        return _database.ExecuteAsync("""
             INSERT INTO image_files (storage_source, cache_key, file_id, record_time, storage_duration_seconds)
             VALUES (@StorageSource, @CacheKey, @FileId, @RecordTime, @StorageDurationSeconds)
             ON CONFLICT(storage_source, cache_key) DO UPDATE SET
