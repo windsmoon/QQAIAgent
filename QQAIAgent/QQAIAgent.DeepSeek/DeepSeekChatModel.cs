@@ -15,7 +15,7 @@ namespace QQAIAgent.DeepSeek;
 public sealed class DeepSeekChatModel : IChatModel, IDisposable
 {
     #region fields
-    private const string StorageSource = "DeepSeek";
+    private const string StorageSource = "QQAIAgent.DeepSeek";
     private readonly HttpClient _httpClient;
     private readonly ImageFileStore _imageFilStore;
     private readonly ILogger<DeepSeekChatModel> _logger;
@@ -40,7 +40,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
-            ?? throw new InvalidDataException($"DeepSeek 配置不能为 null：{configPath}");
+            ?? throw new InvalidDataException($"QQAIAgent.DeepSeek 配置不能为 null：{configPath}");
 
         ArgumentException.ThrowIfNullOrWhiteSpace(config.ApiKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(config.Model);
@@ -51,7 +51,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
 
         if (Uri.TryCreate(config.Endpoint, UriKind.Absolute, out var endpoint) == false || endpoint.Scheme != Uri.UriSchemeHttps)
         {
-            throw new ArgumentException("DeepSeek Endpoint 必须是 HTTPS 绝对地址。", nameof(config));
+            throw new ArgumentException("QQAIAgent.DeepSeek Endpoint 必须是 HTTPS 绝对地址。", nameof(config));
         }
 
         _apiKey = config.ApiKey;
@@ -91,7 +91,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 ChatRole.User => "user",
                 ChatRole.Assistant => "assistant",
                 ChatRole.Tool => "tool",
-                _ => throw new NotSupportedException($"当前 DeepSeek 实现不支持 {message.Role} 角色。")
+                _ => throw new NotSupportedException($"当前 QQAIAgent.DeepSeek 实现不支持 {message.Role} 角色。")
             };
 
             object serializedContent;
@@ -99,7 +99,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             {
                 if (message.Role != ChatRole.User)
                 {
-                    throw new NotSupportedException("DeepSeek 图片输入仅支持 User 消息。");
+                    throw new NotSupportedException("QQAIAgent.DeepSeek 图片输入仅支持 User 消息。");
                 }
 
                 var contentParts = new List<object>(message.ContentList.Count);
@@ -159,7 +159,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                             contentParts.Add(new { type = "file", file_id = imageContent.FileId });
                             break;
                         default:
-                            throw new NotSupportedException("当前 DeepSeek 适配仅支持文本和图片内容。");
+                            throw new NotSupportedException("当前 QQAIAgent.DeepSeek 适配仅支持文本和图片内容。");
                     }
                 }
 
@@ -170,7 +170,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 serializedContent = string.Concat(message.ContentList.Select(content => content switch
                 {
                     ChatTextContent textContent => textContent.Text,
-                    _ => throw new NotSupportedException("当前 DeepSeek 适配仅支持文本和图片内容。")
+                    _ => throw new NotSupportedException("当前 QQAIAgent.DeepSeek 适配仅支持文本和图片内容。")
                 }));
             }
 
@@ -210,7 +210,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             messages.Add(serializedMessage);
         }
 
-        // 统一档位在模型类库内映射；DeepSeek 的 medium 与 high 使用同一实际档位。
+        // 统一档位在模型类库内映射；QQAIAgent.DeepSeek 的 medium 与 high 使用同一实际档位。
         var reasoningEffort = request.ReasoningEffort switch
         {
             ReasoningEffort.Minimal => null,
@@ -316,7 +316,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         if (uploadResponse.IsSuccessStatusCode == false)
         {
             var errorBody = await uploadResponse.Content.ReadAsStringAsync(timeout.Token);
-            throw new HttpRequestException($"上传图片到 DeepSeek 失败：HTTP={(int)uploadResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
+            throw new HttpRequestException($"上传图片到 QQAIAgent.DeepSeek 失败：HTTP={(int)uploadResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
                 null, uploadResponse.StatusCode);
         }
         await using var responseStream = await uploadResponse.Content.ReadAsStreamAsync(timeout.Token);
@@ -326,7 +326,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             : null;
         if (string.IsNullOrWhiteSpace(fileId))
         {
-            throw new InvalidDataException("DeepSeek 文件上传响应缺少有效的文件 ID。");
+            throw new InvalidDataException("QQAIAgent.DeepSeek 文件上传响应缺少有效的文件 ID。");
         }
 
         return fileId;
@@ -341,13 +341,13 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     {
         if (root.TryGetProperty("choices", out var choices) == false || choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
         {
-            throw new InvalidDataException("DeepSeek 响应缺少 choices。");
+            throw new InvalidDataException("QQAIAgent.DeepSeek 响应缺少 choices。");
         }
 
         var choice = choices[0];
         if (choice.TryGetProperty("finish_reason", out var finishValue) == false || finishValue.ValueKind != JsonValueKind.String)
         {
-            throw new InvalidDataException("DeepSeek 响应缺少 finish_reason。");
+            throw new InvalidDataException("QQAIAgent.DeepSeek 响应缺少 finish_reason。");
         }
 
         var finishReason = finishValue.GetString() switch
@@ -367,7 +367,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             || responseMessage.TryGetProperty("content", out var content) == false
             || content.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
         {
-            throw new InvalidDataException("DeepSeek 响应缺少有效的 assistant 消息。");
+            throw new InvalidDataException("QQAIAgent.DeepSeek 响应缺少有效的 assistant 消息。");
         }
 
         var text = content.GetString() ?? "";
@@ -380,7 +380,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         {
             if (toolCallValues.ValueKind != JsonValueKind.Array)
             {
-                throw new InvalidDataException("DeepSeek 响应中的 tool_calls 必须是数组。");
+                throw new InvalidDataException("QQAIAgent.DeepSeek 响应中的 tool_calls 必须是数组。");
             }
 
             foreach (var toolCall in toolCallValues.EnumerateArray())
@@ -398,7 +398,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                     || function.TryGetProperty("arguments", out var arguments) == false
                     || arguments.ValueKind != JsonValueKind.String)
                 {
-                    throw new InvalidDataException("DeepSeek 响应缺少有效的 function 工具调用。");
+                    throw new InvalidDataException("QQAIAgent.DeepSeek 响应缺少有效的 function 工具调用。");
                 }
 
                 // 参数保留模型返回的字符串，由工具执行阶段负责解析。
@@ -413,12 +413,12 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
 
         if (finishReason == ChatFinishReason.ToolCalls && toolCalls.Count == 0)
         {
-            throw new InvalidDataException("DeepSeek 工具调用响应没有可用的 tool_calls。");
+            throw new InvalidDataException("QQAIAgent.DeepSeek 工具调用响应没有可用的 tool_calls。");
         }
 
         if ((finishReason is ChatFinishReason.Finish or ChatFinishReason.Length) && string.IsNullOrWhiteSpace(text))
         {
-            throw new InvalidDataException("DeepSeek 响应没有可用的文本内容。");
+            throw new InvalidDataException("QQAIAgent.DeepSeek 响应没有可用的文本内容。");
         }
 
         var response = new ChatResponse

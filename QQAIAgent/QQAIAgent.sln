@@ -8,7 +8,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.NapCat", "QQAIAge
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Agent", "QQAIAgent.Agent\QQAIAgent.Agent.csproj", "{A6739730-0F18-48C3-90A4-808588B4479C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeepSeek", "DeepSeek\DeepSeek.csproj", "{B2B861C0-7357-42FA-AB83-C07902461BA3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.DeepSeek", "QQAIAgent.DeepSeek\QQAIAgent.DeepSeek.csproj", "{B2B861C0-7357-42FA-AB83-C07902461BA3}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{A97959F6-F5C4-4C8A-8E2E-D4A5B0FBAB62}"
 	ProjectSection(SolutionItems) = preProject

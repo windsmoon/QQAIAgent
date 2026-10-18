@@ -18,7 +18,7 @@
       <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" />
       <ProjectReference Include="..\QQAIAgent.NapCat\QQAIAgent.NapCat.csproj" />
       <ProjectReference Include="..\QQAIAgent.Schedule\QQAIAgent.Schedule.csproj" />
-      <ProjectReference Include="..\DeepSeek\DeepSeek.csproj" />
+      <ProjectReference Include="..\QQAIAgent.DeepSeek\QQAIAgent.DeepSeek.csproj" />
       <ProjectReference Include="..\QQAIAgent.Tools\QQAIAgent.Tools.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="ToolPluginAssembly" />
     </ItemGroup>
 
