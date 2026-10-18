@@ -23,7 +23,8 @@ public sealed class RkeyCache(IMessageReader messageReader) : IDisposable
             var keys = await messageReader.GetRkeysAsync(cancellationToken);
             foreach (var key in keys)
             {
-                _keys[key.Type] = (key.Key, key.ExpiresAt);
+                // 提前 5 秒视为过期，给后续图片下载请求留出时间。
+                _keys[key.Type] = (key.Key, key.ExpiresAt - 5);
             }
 
             if (_keys.TryGetValue(type, out cached) && cached.ExpiresAt > DateTimeOffset.UtcNow.ToUnixTimeSeconds())
