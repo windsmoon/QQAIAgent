@@ -341,7 +341,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     chatContentList.Add(new ChatTextContent { Text = textContent.Text });
                     break;
                 case ImageContent imageContent:
-                    chatContentList.Add(new ChatImageContent { Url = imageContent.Url });
+                    chatContentList.Add(new ChatImageContent
+                    {
+                        Url = imageContent.Url,
+                        CacheKey = imageContent.SourceGroupId != 0 && imageContent.SourceMessageId is long imageMessageId
+                            ? $"{imageContent.SourceGroupId}-{imageMessageId}-{imageContent.IndexInContents}"
+                            : string.Empty
+                    });
                     break;
                 case VideoContent videoContent:
                     {

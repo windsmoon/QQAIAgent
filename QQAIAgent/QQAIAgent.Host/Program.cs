@@ -79,6 +79,7 @@ builder.Services.AddSingleton<IReadOnlyDictionary<string, ChatToolDefinition>>(
 builder.Services.AddSingleton<NapCatClient>();
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredService<NapCatClient>());
+builder.Services.AddSingleton<RkeyCache>();
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
 PluginLoader.RegisterPlugins(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
 builder.Services.AddSingleton<IScheduleHandler, SendGroupMessageHandler>();

@@ -19,7 +19,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     private readonly HttpClient _httpClient;
     private readonly ImageFileStore _imageFilStore;
     private readonly ILogger<DeepSeekChatModel> _logger;
-    private readonly IMessageReader _messageReader;
+    private readonly RkeyCache _rkeyCache;
     private readonly string _apiKey;
     private readonly string _model;
     private readonly Uri _endpoint;
@@ -32,11 +32,11 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #endregion
 
     #region methods
-    public DeepSeekChatModel(ImageFileStore imageFilStore, ILogger<DeepSeekChatModel> logger, IMessageReader messageReader)
+    public DeepSeekChatModel(ImageFileStore imageFilStore, ILogger<DeepSeekChatModel> logger, RkeyCache rkeyCache)
     {
         _imageFilStore = imageFilStore;
         _logger = logger;
-        _messageReader = messageReader;
+        _rkeyCache = rkeyCache;
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
@@ -112,17 +112,25 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                             contentParts.Add(new { type = "text", text = textContent.Text });
                             break;
                         case ChatImageContent imageContent:
+                            var hasCacheKey = string.IsNullOrEmpty(imageContent.CacheKey) == false;
                             try
                             {
                                 if (string.IsNullOrEmpty(imageContent.FileId))
                                 {
-                                    if (uploadedFiles.TryGetValue(imageContent.Url, out var fileId) == false)
+                                    var fileId = string.Empty;
+                                    if (hasCacheKey == false || uploadedFiles.TryGetValue(imageContent.CacheKey, out fileId) == false)
                                     {
-                                        fileId = await _imageFilStore.FindValidFileIdAsync(StorageSource, imageContent.Url, cancellationToken);
+                                        if (hasCacheKey)
+                                        {
+                                            fileId = await _imageFilStore.FindValidFileIdAsync(StorageSource, imageContent.CacheKey, cancellationToken);
+                                        }
                                         if (string.IsNullOrEmpty(fileId))
                                         {
                                             fileId = await UploadImageAsync(imageContent.Url, cancellationToken);
-                                            Task.Run(() => _imageFilStore.RecordAsync(StorageSource, imageContent.Url, fileId, TimeSpan.FromDays(29), CancellationToken.None));
+                                            if (hasCacheKey)
+                                            {
+                                                Task.Run(() => _imageFilStore.RecordAsync(StorageSource, imageContent.CacheKey, fileId, TimeSpan.FromDays(29), CancellationToken.None));
+                                            }
                                         }
                                     }
 
@@ -136,9 +144,9 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                                 imageContent.FileId = string.Empty;
                             }
 
-                            if (string.IsNullOrEmpty(imageContent.Url) == false)
+                            if (hasCacheKey)
                             {
-                                uploadedFiles[imageContent.Url] = imageContent.FileId;
+                                uploadedFiles[imageContent.CacheKey] = imageContent.FileId;
                             }
                             if (string.IsNullOrEmpty(imageContent.FileId))
                             {
@@ -261,28 +269,33 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     }
 
     /// <summary>流式读取并上传图片，文件自创建起保留 30 天，下载和上传共用单次超时。</summary>
-    private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken, bool refreshExpiredUrl = true)
+    private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
+        var imageUri = new Uri(imageUrl);
+        if (imageUri.Host == "multimedia.nt.qq.com.cn")
+        {
+            var queryParts = imageUri.Query.TrimStart('?').Split('&').ToList();
+            // 仅处理图片的两种业务类型，不能把视频等其他 appid 当作群聊图片。
+            var keyType = queryParts.Contains("appid=1406") ? "private"
+                : queryParts.Contains("appid=1407") ? "group" : string.Empty;
+            var rkeyIndex = queryParts.FindIndex(part => part.StartsWith("rkey=", StringComparison.Ordinal));
+            if (keyType != string.Empty && rkeyIndex >= 0)
+            {
+                var rkey = await _rkeyCache.GetAsync(keyType, timeout.Token);
+                // 下载前替换有效凭据，保留 fileid 等原始参数；上传缓存仍使用消息来源键。
+                queryParts[rkeyIndex] = "rkey=" + Uri.EscapeDataString(rkey);
+                imageUrl = new UriBuilder(imageUri) { Query = string.Join("&", queryParts) }.Uri.AbsoluteUri;
+            }
+        }
         // API 密钥只加在上传请求上，读取图片来源时不携带。
         using var imageResponse = await _httpClient.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         if (imageResponse.IsSuccessStatusCode == false)
         {
             var errorBody = await imageResponse.Content.ReadAsStringAsync(timeout.Token);
-            if (imageResponse.StatusCode == System.Net.HttpStatusCode.BadRequest &&
-                errorBody.Contains("download url has expired", StringComparison.OrdinalIgnoreCase) &&
-                refreshExpiredUrl && new Uri(imageUrl).Host == "multimedia.nt.qq.com.cn")
-            {
-                // 只刷新一次，重试仍受原图片超时约束；成功后由调用方按旧地址缓存文件 ID。
-                _logger.LogInformation("图片下载地址已过期，正在通过 NapCat 刷新凭据。");
-                var refreshedUrl = await _messageReader.RefreshImageUrlAsync(imageUrl, timeout.Token);
-                var refreshedFileId = await UploadImageAsync(refreshedUrl, timeout.Token, refreshExpiredUrl: false);
-                _logger.LogInformation("图片凭据刷新后上传成功。");
-                return refreshedFileId;
-            }
             throw new HttpRequestException($"下载原始图片失败：HTTP={(int)imageResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
                 null, imageResponse.StatusCode);
         }

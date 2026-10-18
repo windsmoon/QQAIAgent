@@ -9,8 +9,8 @@ public interface IMessageReader
     Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken);
     /// <summary>根据群号和群文件资源 ID 获取下载地址。</summary>
     Task<string> GetGroupFileUrlAsync(long groupId, string fileId, CancellationToken cancellationToken);
-    /// <summary>刷新 QQ 图片下载地址中的过期凭据，保留原始图片资源标识。</summary>
-    Task<string> RefreshImageUrlAsync(string imageUrl, CancellationToken cancellationToken);
+    /// <summary>获取当前图片下载凭据；ExpiresAt 为创建时间加有效期得到的 Unix 秒时间戳。</summary>
+    Task<List<(string Type, string Key, long ExpiresAt)>> GetRkeysAsync(CancellationToken cancellationToken);
     Task<string> GetGroupMemberCardAsync(long groupId, long userId, CancellationToken cancellationToken);
     #endregion
 }

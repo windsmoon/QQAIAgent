@@ -12,7 +12,7 @@ using QQAIAgent.Schedule;
 
 namespace QQAIAgent.Host;
 
-public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, GroupMessageStore groupMessageStore, AgentConfig agentConfig, NapCatConfig napCatConfig, ScheduleConfig scheduleConfig, ScheduleService scheduleService, IReadOnlyDictionary<string, IScheduleHandler> scheduleHandlers, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
+public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, GroupMessageStore groupMessageStore, RkeyCache rkeyCache, AgentConfig agentConfig, NapCatConfig napCatConfig, ScheduleConfig scheduleConfig, ScheduleService scheduleService, IReadOnlyDictionary<string, IScheduleHandler> scheduleHandlers, ILogger<Worker> logger, IHostApplicationLifetime applicationLifetime) : BackgroundService
 {
     #region fields
     private readonly Channel<(GroupMessage Message, long ReceivedTimestamp)> _messages = Channel.CreateBounded<(GroupMessage Message, long ReceivedAt)>(new BoundedChannelOptions(50)
@@ -44,6 +44,17 @@ public class Worker(NapCatClient napCatClient, GroupMessageAgent messageAgent, G
 
                     await napCatClient.VerifyAccountAsync(startupTimeout.Token);
                     logger.LogInformation("NapCat 登录账号核验通过。");
+                    try
+                    {
+                        // 首次获取会缓存两类凭据；必须等接收循环启动后再调用 NapCat 接口。
+                        await rkeyCache.GetAsync("private", startupTimeout.Token);
+                        await rkeyCache.GetAsync("group", startupTimeout.Token);
+                        logger.LogInformation("图片 Rkey 缓存初始化完成。");
+                    }
+                    catch (Exception exception) when (stoppingToken.IsCancellationRequested == false)
+                    {
+                        logger.LogWarning("图片 Rkey 缓存初始化失败，下载图片时将重新获取：{Reason}", exception.Message);
+                    }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested == false)
                 {
