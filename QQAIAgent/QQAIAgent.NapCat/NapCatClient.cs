@@ -116,6 +116,44 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return ReadOptionalString(data, "url");
     }
 
+    public async Task<string> RefreshImageUrlAsync(string imageUrl, CancellationToken cancellationToken)
+    {
+        var uri = new Uri(imageUrl);
+        var queryParts = uri.Query.TrimStart('?').Split('&').ToList();
+        var rkeyIndex = queryParts.FindIndex(part => part.StartsWith("rkey=", StringComparison.Ordinal));
+        if (rkeyIndex < 0)
+        {
+            throw new InvalidDataException("QQ 图片下载地址缺少 rkey 参数，无法刷新。");
+        }
+
+        // NapCat 按 appid=1406 使用私聊凭据，其余图片使用群聊凭据；转发中的私聊图片也需遵循此映射。
+        var keyType = queryParts.Contains("appid=1406") ? "private" : "group";
+        var data = await CallApiAsync("get_rkey", new { }, cancellationToken);
+        foreach (var item in data.EnumerateArray())
+        {
+            if (item.GetProperty("type").GetString() != keyType)
+            {
+                continue;
+            }
+
+            var rkey = item.GetProperty("rkey").GetString() ?? string.Empty;
+            if (rkey.StartsWith("&rkey=", StringComparison.Ordinal))
+            {
+                rkey = rkey[6..];
+            }
+            if (string.IsNullOrWhiteSpace(rkey))
+            {
+                throw new InvalidDataException("NapCat 返回的图片下载凭据为空。");
+            }
+
+            // 只替换 rkey，不重新编码 fileid 等原始查询参数。
+            queryParts[rkeyIndex] = "rkey=" + Uri.EscapeDataString(rkey);
+            return new UriBuilder(uri) { Query = string.Join("&", queryParts) }.Uri.AbsoluteUri;
+        }
+
+        throw new InvalidDataException($"NapCat 未返回 {keyType} 图片下载凭据。");
+    }
+
     public async Task<string> GetGroupMemberCardAsync(long groupId, long userId, CancellationToken cancellationToken)
     {
         var data = await CallApiAsync("get_group_member_info", new { group_id = groupId, user_id = userId }, cancellationToken);

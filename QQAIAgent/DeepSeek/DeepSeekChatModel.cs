@@ -8,6 +8,7 @@ using QQAIAgent.Agent;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Infrastructure.Image;
+using QQAIAgent.Messaging;
 
 namespace QQAIAgent.DeepSeek;
 
@@ -18,6 +19,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     private readonly HttpClient _httpClient;
     private readonly ImageFileStore _imageFilStore;
     private readonly ILogger<DeepSeekChatModel> _logger;
+    private readonly IMessageReader _messageReader;
     private readonly string _apiKey;
     private readonly string _model;
     private readonly Uri _endpoint;
@@ -30,10 +32,11 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #endregion
 
     #region methods
-    public DeepSeekChatModel(ImageFileStore imageFilStore, ILogger<DeepSeekChatModel> logger)
+    public DeepSeekChatModel(ImageFileStore imageFilStore, ILogger<DeepSeekChatModel> logger, IMessageReader messageReader)
     {
         _imageFilStore = imageFilStore;
         _logger = logger;
+        _messageReader = messageReader;
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
@@ -258,7 +261,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     }
 
     /// <summary>流式读取并上传图片，文件自创建起保留 30 天，下载和上传共用单次超时。</summary>
-    private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken)
+    private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken, bool refreshExpiredUrl = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
 
@@ -269,6 +272,17 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         if (imageResponse.IsSuccessStatusCode == false)
         {
             var errorBody = await imageResponse.Content.ReadAsStringAsync(timeout.Token);
+            if (imageResponse.StatusCode == System.Net.HttpStatusCode.BadRequest &&
+                errorBody.Contains("download url has expired", StringComparison.OrdinalIgnoreCase) &&
+                refreshExpiredUrl && new Uri(imageUrl).Host == "multimedia.nt.qq.com.cn")
+            {
+                // 只刷新一次，重试仍受原图片超时约束；成功后由调用方按旧地址缓存文件 ID。
+                _logger.LogInformation("图片下载地址已过期，正在通过 NapCat 刷新凭据。");
+                var refreshedUrl = await _messageReader.RefreshImageUrlAsync(imageUrl, timeout.Token);
+                var refreshedFileId = await UploadImageAsync(refreshedUrl, timeout.Token, refreshExpiredUrl: false);
+                _logger.LogInformation("图片凭据刷新后上传成功。");
+                return refreshedFileId;
+            }
             throw new HttpRequestException($"下载原始图片失败：HTTP={(int)imageResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
                 null, imageResponse.StatusCode);
         }
