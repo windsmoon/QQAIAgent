@@ -2,13 +2,14 @@ using System.Globalization;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.NapCat;
 
-public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessageStore, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
+public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessageStore, TextToImageStore textToImageStore, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
 {
     #region fields
     private readonly ClientWebSocket _socket = new();
@@ -68,12 +69,35 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
 
         segments.Add(new { type = "text", data = new { text = $" {text}" } });
 
-        var data = await CallApiAsync("send_group_msg", new
+        // 图片转换暂不实现，保留原始回复文本，供自身图片消息上报后关联。
+        var sendId = textToImageStore.BeginSend(groupId, text);
+        long messageId;
+        try
         {
-            group_id = groupId,
-            message = segments
-        }, cancellationToken);
-        return data.GetProperty("message_id").GetInt64();
+            var data = await CallApiAsync("send_group_msg", new
+            {
+                group_id = groupId,
+                message = segments
+            }, cancellationToken);
+            messageId = data.GetProperty("message_id").GetInt64();
+        }
+        catch
+        {
+            textToImageStore.CancelSend(sendId);
+            throw;
+        }
+
+        try
+        {
+            // 发送已经成功，缓存写入不再受原请求取消影响，也不能将缓存失败当作发送失败。
+            await textToImageStore.CompleteSendAsync(sendId, messageId, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "回复图片原文缓存写入失败：群={GroupId}，消息ID={MessageId}", groupId, messageId);
+        }
+
+        return messageId;
     }
 
     public async Task<GroupMessage> GetGroupMessageAsync(long messageId, CancellationToken cancellationToken)
@@ -84,7 +108,9 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
             throw new InvalidDataException("引用消息必须是群消息。");
         }
 
-        return GroupMessageParser.ParseGroupMessage(data);
+        var message = GroupMessageParser.ParseGroupMessage(data);
+        await textToImageStore.RestoreAsync(message, cancellationToken);
+        return message;
     }
 
     public async Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken)
@@ -105,6 +131,11 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         {
             // 转发节点结构与群消息事件同构，直接按群消息解析。
             messages.AddRange(nodes.EnumerateArray().Select(GroupMessageParser.ParseGroupMessage));
+        }
+
+        foreach (var message in messages)
+        {
+            await textToImageStore.RestoreAsync(message, cancellationToken);
         }
 
         return messages;
@@ -334,6 +365,12 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
                         if (IsGroupMessageEvent(root))
                         {
                             var groupMessage = GroupMessageParser.ParseGroupMessage(root);
+                            if (groupMessage.SenderId == config.BotAccount)
+                            {
+                                // SQLite 异步接口可能同步执行，将匹配和写入交给线程池，继续接收发送接口响应。
+                                _ = Task.Run(() => RecordTextToImageMessageAsync(groupMessage));
+                            }
+
                             GroupMessageReceived?.Invoke(groupMessage);
                         }
                     }
@@ -356,6 +393,19 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
             {
                 _pendingResponse?.TrySetException(failure ?? new IOException("NapCat 在接口响应返回前关闭了连接。"));
             }
+        }
+    }
+
+    private async Task RecordTextToImageMessageAsync(GroupMessage message)
+    {
+        try
+        {
+            await textToImageStore.RecordReceivedAsync(message, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "自身消息的回复图片原文缓存写入失败：群={GroupId}，消息ID={MessageId}",
+                message.GroupId, message.MessageId);
         }
     }
 

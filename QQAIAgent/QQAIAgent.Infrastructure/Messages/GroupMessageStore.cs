@@ -2,12 +2,13 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
+using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Messaging;
 
 namespace QQAIAgent.Infrastructure.Messages;
 
 /// <summary>只记录初始化时允许的群，每个群使用独立的 SQLite 文件。</summary>
-public sealed partial class GroupMessageStore(string directoryPath)
+public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore)
 {
     #region fields
     private readonly Dictionary<long, IDatabase> _databases = [];
@@ -99,6 +100,7 @@ public sealed partial class GroupMessageStore(string directoryPath)
 
         using var document = JsonDocument.Parse(message.ContentJson);
         GroupMessageParser.ParseMessageContents(message, document.RootElement);
+        await textToImageStore.RestoreAsync(message, cancellationToken);
         return message;
     }
 
@@ -129,6 +131,7 @@ public sealed partial class GroupMessageStore(string directoryPath)
             cancellationToken.ThrowIfCancellationRequested();
             using var document = JsonDocument.Parse(message.ContentJson);
             GroupMessageParser.ParseMessageContents(message, document.RootElement);
+            await textToImageStore.RestoreAsync(message, cancellationToken);
         }
 
         return messageList;

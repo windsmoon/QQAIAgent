@@ -37,11 +37,14 @@ var connectionString = new SqliteConnectionStringBuilder
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
 builder.Services.AddSingleton(new ImageFileStore(Path.Combine(AppContext.BaseDirectory, "Data")));
+builder.Services.AddSingleton(services => new TextToImageStore(Path.Combine(AppContext.BaseDirectory, "Data"),
+    services.GetRequiredService<NapCatConfig>().BotAccount));
 builder.Services.AddSingleton(new VideoCacheStore(Path.Combine(AppContext.BaseDirectory, "Data")));
 builder.Services.AddSingleton<IVideoCache>(services => services.GetRequiredService<VideoCacheStore>());
 
 var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
-builder.Services.AddSingleton(new GroupMessageStore(messagesDirectoryPath));
+builder.Services.AddSingleton(services => new GroupMessageStore(messagesDirectoryPath,
+    services.GetRequiredService<TextToImageStore>()));
 builder.Services.AddSingleton<IGroupMessageQuery>(services => services.GetRequiredService<GroupMessageStore>());
 builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
@@ -103,6 +106,7 @@ await host.Services.GetRequiredService<IDatabase>().ExecuteAsync("DROP TABLE IF 
 #endregion
 await host.Services.GetRequiredService<RequestStatistics>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<ImageFileStore>().InitializeAsync(CancellationToken.None);
+await host.Services.GetRequiredService<TextToImageStore>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<VideoCacheStore>().InitializeAsync(CancellationToken.None);
 await host.Services.GetRequiredService<GroupMessageStore>().InitializeAsync(agentConfig.AllowedGroups, CancellationToken.None);
 await host.Services.GetRequiredService<ForwardMessageStore>().InitializeAsync(CancellationToken.None);
