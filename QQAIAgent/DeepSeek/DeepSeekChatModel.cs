@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using QQAIAgent.Abstractions;
 using QQAIAgent.DeepSeek.Config;
 using QQAIAgent.Agent;
@@ -16,6 +17,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     private const string StorageSource = "DeepSeek";
     private readonly HttpClient _httpClient;
     private readonly ImageFileStore _imageFilStore;
+    private readonly ILogger<DeepSeekChatModel> _logger;
     private readonly string _apiKey;
     private readonly string _model;
     private readonly Uri _endpoint;
@@ -28,9 +30,10 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #endregion
 
     #region methods
-    public DeepSeekChatModel(ImageFileStore imageFilStore)
+    public DeepSeekChatModel(ImageFileStore imageFilStore, ILogger<DeepSeekChatModel> logger)
     {
         _imageFilStore = imageFilStore;
+        _logger = logger;
         var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
@@ -97,32 +100,50 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
                 }
 
                 var contentParts = new List<object>(message.ContentList.Count);
-                foreach (var content in message.ContentList)
+                for (var contentIndex = 0; contentIndex < message.ContentList.Count; contentIndex++)
                 {
+                    var content = message.ContentList[contentIndex];
                     switch (content)
                     {
                         case ChatTextContent textContent:
                             contentParts.Add(new { type = "text", text = textContent.Text });
                             break;
                         case ChatImageContent imageContent:
-                            if (string.IsNullOrEmpty(imageContent.FileId))
+                            try
                             {
-                                if (uploadedFiles.TryGetValue(imageContent.Url, out var fileId) == false)
+                                if (string.IsNullOrEmpty(imageContent.FileId))
                                 {
-                                    fileId = await _imageFilStore.FindValidFileIdAsync(StorageSource, imageContent.Url, cancellationToken);
-                                    if (string.IsNullOrEmpty(fileId))
+                                    if (uploadedFiles.TryGetValue(imageContent.Url, out var fileId) == false)
                                     {
-                                        fileId = await UploadImageAsync(imageContent.Url, cancellationToken);
-                                        Task.Run(() => _imageFilStore.RecordAsync(StorageSource, imageContent.Url, fileId, TimeSpan.FromDays(29), CancellationToken.None));
+                                        fileId = await _imageFilStore.FindValidFileIdAsync(StorageSource, imageContent.Url, cancellationToken);
+                                        if (string.IsNullOrEmpty(fileId))
+                                        {
+                                            fileId = await UploadImageAsync(imageContent.Url, cancellationToken);
+                                            Task.Run(() => _imageFilStore.RecordAsync(StorageSource, imageContent.Url, fileId, TimeSpan.FromDays(29), CancellationToken.None));
+                                        }
                                     }
-                                }
 
-                                imageContent.FileId = fileId;
+                                    imageContent.FileId = fileId;
+                                }
+                            }
+                            catch (Exception exception) when (cancellationToken.IsCancellationRequested == false)
+                            {
+                                _logger.LogWarning("图片处理失败，已替换为文字标记：图片地址={ImageUrl}，原因={Reason}",
+                                    imageContent.Url, exception.Message);
+                                imageContent.FileId = string.Empty;
                             }
 
                             if (string.IsNullOrEmpty(imageContent.Url) == false)
                             {
                                 uploadedFiles[imageContent.Url] = imageContent.FileId;
+                            }
+                            if (string.IsNullOrEmpty(imageContent.FileId))
+                            {
+                                // 失败结果保留在本次请求的消息中，避免后续工具调用轮次重复读取同一张图片。
+                                var fallback = new ChatTextContent { Text = "[图片读取失败]" };
+                                message.ContentList[contentIndex] = fallback;
+                                contentParts.Add(new { type = "text", text = fallback.Text });
+                                break;
                             }
                             contentParts.Add(new { type = "file", file_id = imageContent.FileId });
                             break;
@@ -245,7 +266,12 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         timeout.CancelAfter(_timeout);
         // API 密钥只加在上传请求上，读取图片来源时不携带。
         using var imageResponse = await _httpClient.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        imageResponse.EnsureSuccessStatusCode();
+        if (imageResponse.IsSuccessStatusCode == false)
+        {
+            var errorBody = await imageResponse.Content.ReadAsStringAsync(timeout.Token);
+            throw new HttpRequestException($"下载原始图片失败：HTTP={(int)imageResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
+                null, imageResponse.StatusCode);
+        }
         await using var imageStream = await imageResponse.Content.ReadAsStreamAsync(timeout.Token);
         using var uploadContent = new MultipartFormDataContent();
         // 直接转发响应流，不落盘、不生成完整字节数组或 Base64 字符串。
@@ -260,7 +286,12 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         };
         uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         using var uploadResponse = await _httpClient.SendAsync(uploadRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        uploadResponse.EnsureSuccessStatusCode();
+        if (uploadResponse.IsSuccessStatusCode == false)
+        {
+            var errorBody = await uploadResponse.Content.ReadAsStringAsync(timeout.Token);
+            throw new HttpRequestException($"上传图片到 DeepSeek 失败：HTTP={(int)uploadResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
+                null, uploadResponse.StatusCode);
+        }
         await using var responseStream = await uploadResponse.Content.ReadAsStreamAsync(timeout.Token);
         using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
         var fileId = document.RootElement.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
