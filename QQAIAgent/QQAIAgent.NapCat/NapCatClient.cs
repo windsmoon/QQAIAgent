@@ -67,9 +67,18 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
             segments.Add(new { type = "at", data = new { qq = userId.ToString(CultureInfo.InvariantCulture) } });
         }
 
-        segments.Add(new { type = "text", data = new { text = $" {text}" } });
+        try
+        {
+            var imageBytes = TextToImage.Render(text);
+            segments.Add(new { type = "image", data = new { file = $"base64://{Convert.ToBase64String(imageBytes)}" } });
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "回复转图片失败，改为发送文本：群={GroupId}", groupId);
+            segments.Add(new { type = "text", data = new { text = $" {text}" } });
+        }
 
-        // 图片转换暂不实现，保留原始回复文本，供自身图片消息上报后关联。
+        // 保留原始回复文本，供自身图片消息上报后关联。
         var sendId = textToImageStore.BeginSend(groupId, text);
         long messageId;
         try
