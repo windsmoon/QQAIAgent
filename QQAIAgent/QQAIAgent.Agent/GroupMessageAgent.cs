@@ -344,9 +344,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     chatContentList.Add(new ChatImageContent
                     {
                         Url = imageContent.Url,
-                        CacheKey = imageContent.SourceGroupId != 0 && imageContent.SourceMessageId is long imageMessageId
-                            ? $"{imageContent.SourceGroupId}-{imageMessageId}-{imageContent.IndexInContents}"
-                            : string.Empty
+                        CacheKey = imageContent.CacheKey
                     });
                     break;
                 case VideoContent videoContent:
