@@ -5,6 +5,7 @@
   "FirstReasoningEffort": "Low",
   "MaxModelCalls": 20,
   "QQRequestTimeoutSeconds": 300,
+  "TextToImageThreshold": 200,
   "MaxReferenceDepth": 5,
   "MaxForwardDepth": 5,
   "MaxForwardMessagesPerLayer": 20,

@@ -18,6 +18,8 @@ public class AgentConfig
     public int MaxModelCalls { get; set; } = 20;
     /// <summary>每条 QQ 用户请求从接收到正常回复的总超时秒数，包含排队、引用读取、所有模型调用和工具执行。</summary>
     public int QQRequestTimeoutSeconds { get; set; } = 300;
+    /// <summary>回复文本长度超过此值时转为图片发送，否则发送文字。</summary>
+    public int TextToImageThreshold { get; set; } = 200;
     /// <summary>允许展开的最大引用层数，不包含当前消息；0 表示不读取引用。</summary>
     public int MaxReferenceDepth { get; set; } = 5;
     /// <summary>合并转发展开的最大嵌套层数；0 表示不展开。</summary>

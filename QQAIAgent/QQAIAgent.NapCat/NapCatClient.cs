@@ -9,7 +9,7 @@ using QQAIAgent.NapCat.Config;
 
 namespace QQAIAgent.NapCat;
 
-public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessageStore, TextToImageStore textToImageStore, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
+public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessageStore, TextToImageStore textToImageStore, int textToImageThreshold, ILogger<NapCatClient> logger) : IMessageSender, IMessageReader, IDisposable
 {
     #region fields
     private readonly ClientWebSocket _socket = new();
@@ -69,8 +69,15 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
 
         try
         {
-            var imageBytes = TextToImage.Render(text, logger);
-            segments.Add(new { type = "image", data = new { file = $"base64://{Convert.ToBase64String(imageBytes)}" } });
+            if (text.Length > textToImageThreshold)
+            {
+                var imageBytes = TextToImage.Render(text, logger);
+                segments.Add(new { type = "image", data = new { file = $"base64://{Convert.ToBase64String(imageBytes)}" } });
+            }
+            else
+            {
+                segments.Add(new { type = "text", data = new { text = $" {text}" } });
+            }
         }
         catch (Exception exception)
         {

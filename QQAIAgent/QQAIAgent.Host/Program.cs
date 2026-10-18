@@ -79,7 +79,9 @@ builder.Services.AddSingleton<ScheduleService>();
 builder.Services.AddSingleton<IReadOnlyList<ChatToolDefinition>>(toolDefinitions);
 builder.Services.AddSingleton<IReadOnlyDictionary<string, ChatToolDefinition>>(
     toolDefinitions.ToDictionary(definition => definition.Name, StringComparer.Ordinal));
-builder.Services.AddSingleton<NapCatClient>();
+builder.Services.AddSingleton(services => new NapCatClient(napCatConfig,
+    services.GetRequiredService<ForwardMessageStore>(), services.GetRequiredService<TextToImageStore>(),
+    agentConfig.TextToImageThreshold, services.GetRequiredService<ILogger<NapCatClient>>()));
 builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<RkeyCache>();
