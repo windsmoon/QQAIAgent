@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
 namespace QQAIAgent.Infrastructure.Image;
@@ -7,8 +9,9 @@ public static class TextToImage
 {
     #region methods
     /// <summary>将纯文本绘制为一张白底黑字 PNG，保留换行并按宽度自动折行。</summary>
-    public static byte[] Render(string text)
+    public static byte[] Render(string text, ILogger logger)
     {
+        var startedAt = Stopwatch.GetTimestamp();
         const int width = 960;
         const int padding = 32;
         const float fontSize = 26;
@@ -55,7 +58,10 @@ public static class TextToImage
 
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Jpeg, 100);
-        return data.ToArray();
+        var result = data.ToArray();
+        logger.LogInformation("文字转图片渲染耗时：耗时={ElapsedMilliseconds:F1} ms",
+            Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+        return result;
     }
     #endregion
 }

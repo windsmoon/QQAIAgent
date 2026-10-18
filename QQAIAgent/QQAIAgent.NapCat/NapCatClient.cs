@@ -69,7 +69,7 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
 
         try
         {
-            var imageBytes = TextToImage.Render(text);
+            var imageBytes = TextToImage.Render(text, logger);
             segments.Add(new { type = "image", data = new { file = $"base64://{Convert.ToBase64String(imageBytes)}" } });
         }
         catch (Exception exception)
