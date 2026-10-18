@@ -114,8 +114,8 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = chatContentList });
 
-        var query = string.Concat(message.MessageContentList.OfType<TextContent>().Select(content => content.Text));
-        var contextList = await ReadContextTextsAsync(message, refMessageIdResults, cancellationToken);
+        var currentMessageText = string.Concat(message.MessageContentList.OfType<TextContent>().Select(content => content.Text));
+        var contextList = await ReadContextMessagesAsync(message, refMessageIdResults, cancellationToken);
 
         for (var modelCall = 0; modelCall < config.MaxModelCalls; modelCall++)
         {
@@ -128,9 +128,9 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             var isPreparingContext = modelCall == 0 && contextList.Count > 0;
             try
             {
-                if (isPreparingContext && string.IsNullOrWhiteSpace(query) == false)
+                if (isPreparingContext)
                 {
-                    await AppendRelatedContextAsync(messages, historyContextIndex, query, contextList,
+                    await AppendRelatedContextAsync(messages, historyContextIndex, currentMessageText, contextList,
                         toolContext, requestId, modelCallId, cancellationToken);
                 }
 
@@ -205,13 +205,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         return (await SendReplyAsync(requestId, message, "已达到模型调用次数上限，请重新发起请求", cancellationToken), "model_call_limit", "");
     }
 
-    private async Task<List<string>> ReadContextTextsAsync(GroupMessage message, HashSet<long> referenceMessageIds, CancellationToken cancellationToken)
+    private async Task<List<GroupMessage>> ReadContextMessagesAsync(GroupMessage message, HashSet<long> referenceMessageIds, CancellationToken cancellationToken)
     {
         var recordList = await groupMessageStore.GetRecentMessagesAsync(message.GroupId, message.MessageId,
             message.MessageTime, config.ContextMessageCount, cancellationToken);
-        // 先限制群消息记录数量，forward 本身算一条，内部文本不另计数；跳过的记录不继续补取。
+        // 先限制群消息记录数量，forward 本身算一条，内部消息段不另计数；跳过的记录不继续补取。
         recordList.Reverse();
-        var texts = new List<string>();
+        var contextMessages = new List<GroupMessage>();
         foreach (var record in recordList)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -221,62 +221,97 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             }
 
             await TryExpandForwardsAsync(record.MessageContentList, 1, cancellationToken);
-            var text = string.Concat(record.MessageContentList.OfType<TextContent>().Select(content => content.Text));
-
-            if (string.IsNullOrWhiteSpace(text) == false)
+            // 历史上下文保留文字、图片和表情的相对顺序，其他消息段仍不纳入。
+            record.MessageContentList.RemoveAll(content => content is not (TextContent or ImageContent or FaceContent));
+            if (record.MessageContentList.Any(content => content is ImageContent or FaceContent ||
+                content is TextContent textContent && string.IsNullOrWhiteSpace(textContent.Text) == false))
             {
-                texts.Add(text);
+                contextMessages.Add(record);
             }
         }
 
-        return texts;
+        return contextMessages;
     }
 
-    private async Task AppendRelatedContextAsync(List<ChatMessage> messages, int contextIndex, string query, List<string> contextTexts,
+    private async Task AppendRelatedContextAsync(List<ChatMessage> messages, int contextIndex, string query, List<GroupMessage> contextMessages,
         ToolContext toolContext, string requestId, string modelCallId, CancellationToken cancellationToken)
     {
-        var toolMessages = await toolExecutor.ExecuteAsync([new ChatToolCall
+        var relatedIndices = new List<int>();
+        var contextTexts = new List<string>();
+        var textMessageIndices = new List<int>();
+        for (var index = 0; index < contextMessages.Count; index++)
         {
-            Id = Guid.NewGuid().ToString("N"),
-            Name = "check_context_relevance",
-            ArgumentsJson = JsonSerializer.Serialize(new { query, contexts = contextTexts })
-        }], toolContext, requestId, modelCallId, cancellationToken, isPreprocessing: true);
-        var resultJson = string.Concat(toolMessages[0].ContentList.OfType<ChatTextContent>().Select(content => content.Text));
-        using var result = JsonDocument.Parse(resultJson);
-        var hasRelatedContext = result.RootElement.GetProperty("hasRelatedContext").GetBoolean();
-        var results = result.RootElement.GetProperty("results");
-        if (config.IsLogContextRelevanceResults)
-        {
-            logger.LogInformation("上下文关联判断结果：候选数={CandidateCount}，阈值={RelevanceThreshold}，是否存在相关上下文={HasRelatedContext}",
-                contextTexts.Count, result.RootElement.GetProperty("relevanceThreshold").GetDouble(), hasRelatedContext);
-            foreach (var item in results.EnumerateArray())
+            var contents = contextMessages[index].MessageContentList;
+            // 文本排序无法判断图片内容，带图片或表情的记录直接保留，包括同条消息中的文字。
+            if (contents.Any(content => content is ImageContent or FaceContent))
             {
-                // 分数排序后的结果仍使用原始下标取回文本，转义正文换行以保持每条候选占一行。
-                var index = item.GetProperty("index").GetInt32();
-                var text = contextTexts[index].Replace("\r", "\\r").Replace("\n", "\\n");
-                logger.LogInformation("上下文候选：下标={Index}，内容={Text}，关联分数={RelevanceScore}，是否相关={IsRelated}",
-                    index, text, item.GetProperty("relevanceScore").GetSingle(), item.GetProperty("isRelated").GetBoolean());
+                relatedIndices.Add(index);
+                continue;
+            }
+
+            contextTexts.Add(string.Concat(contents.OfType<TextContent>().Select(content => content.Text)));
+            textMessageIndices.Add(index);
+        }
+
+        if (string.IsNullOrWhiteSpace(query) == false && contextTexts.Count > 0)
+        {
+            var toolMessages = await toolExecutor.ExecuteAsync([new ChatToolCall
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = "check_context_relevance",
+                ArgumentsJson = JsonSerializer.Serialize(new { query, contexts = contextTexts })
+            }], toolContext, requestId, modelCallId, cancellationToken, isPreprocessing: true);
+            var resultJson = string.Concat(toolMessages[0].ContentList.OfType<ChatTextContent>().Select(content => content.Text));
+            using var result = JsonDocument.Parse(resultJson);
+            var hasRelatedContext = result.RootElement.GetProperty("hasRelatedContext").GetBoolean();
+            var results = result.RootElement.GetProperty("results");
+            if (config.IsLogContextRelevanceResults)
+            {
+                logger.LogInformation("上下文关联判断结果：候选数={CandidateCount}，阈值={RelevanceThreshold}，是否存在相关上下文={HasRelatedContext}",
+                    contextTexts.Count, result.RootElement.GetProperty("relevanceThreshold").GetDouble(), hasRelatedContext);
+                foreach (var item in results.EnumerateArray())
+                {
+                    // 分数排序后的结果仍使用原始下标取回文本，转义正文换行以保持每条候选占一行。
+                    var index = item.GetProperty("index").GetInt32();
+                    var text = contextTexts[index].Replace("\r", "\\r").Replace("\n", "\\n");
+                    logger.LogInformation("上下文候选：下标={Index}，内容={Text}，关联分数={RelevanceScore}，是否相关={IsRelated}",
+                        index, text, item.GetProperty("relevanceScore").GetSingle(), item.GetProperty("isRelated").GetBoolean());
+                }
+            }
+
+            if (hasRelatedContext)
+            {
+                // 排序接口的下标只对应纯文本候选，通过映射取回包含图片、表情的历史列表下标。
+                relatedIndices.AddRange(results.EnumerateArray()
+                    .Where(item => item.GetProperty("isRelated").GetBoolean())
+                    .Select(item => textMessageIndices[item.GetProperty("index").GetInt32()]));
             }
         }
 
-        if (hasRelatedContext == false)
+        if (relatedIndices.Count == 0)
         {
             return;
         }
 
-        // 百炼按关联分数排序，加入对话前用原始下标恢复群消息的时间顺序。
-        var relatedIndices = results.EnumerateArray()
-            .Where(item => item.GetProperty("isRelated").GetBoolean())
-            .Select(item => item.GetProperty("index").GetInt32()).ToList();
+        // 百炼按关联分数排序，与直接保留的记录合并后恢复群消息的时间顺序。
         relatedIndices.Sort();
+        var contentList = new List<ChatContent>
+        {
+            new ChatTextContent { Text = "以下是当前群的近期历史消息，包含图片、表情及与提问相关的文字消息，仅作为上下文：\n" }
+        };
+        foreach (var index in relatedIndices)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var contextMessage = contextMessages[index];
+            await AppendChatContentsAsync(contentList, contextMessage.MessageContentList,
+                contextMessage.GroupId, isReference: false, cancellationToken);
+            contentList.Add(new ChatTextContent { Text = "\n" });
+        }
+
         messages.Insert(contextIndex, new ChatMessage
         {
             Role = ChatRole.User,
-            ContentList = [new ChatTextContent
-            {
-                Text = "以下是当前群与提问相关的近期历史消息，仅作为上下文：\n" +
-                    string.Join("\n", relatedIndices.Select(index => contextTexts[index]))
-            }]
+            ContentList = contentList
         });
     }
 

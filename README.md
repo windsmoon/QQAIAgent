@@ -61,7 +61,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | `MaxReferenceDepth` | `5` | 最大引用层数，直接引用计为第 1 层；`0` 不读取引用 |
 | `MaxForwardDepth` | `5` | 合并转发的展开深度限制，计数边界见下文 |
 | `MaxForwardMessagesPerLayer` | `20` | 每个合并转发取前多少条节点消息；超出时给出截断说明 |
-| `ContextMessageCount` | `15` | 首次 ChatRequest 前从当前群消息记录库读取的最近记录数；forward 本身算一条，内部文本不另计数；提取普通消息和展开后的 forward 中的 text，本次已读取的引用链消息及非文本记录跳过后仍计数，不补取；`0` 不读取 |
+| `ContextMessageCount` | `15` | 首次 ChatRequest 前从当前群消息记录库读取的最近记录数；forward 本身算一条，内部消息段不另计数；保留普通消息和展开后的 forward 中的文字、图片和表情，本次已读取的引用链消息及无这些内容的记录跳过后仍计数，不补取；`0` 不读取 |
 | `LogContextRelevanceResults` | `false` | 输出关联判断汇总及逐条候选的正文、下标、分数和是否相关；设为 `true` 后输出，配置随 Agent 配置在启动时读取 |
 
 超时字段和模型调用次数填写正数。达到最后一次模型调用且模型仍要求工具时，不执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
@@ -105,7 +105,9 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 
 ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和发布时复制到程序目录的 `Third/FFmpeg/`。`FfprobePath` 默认值为 `Third/FFmpeg/ffprobe.exe`；可改为其他可执行文件的绝对路径，带目录的相对路径以程序目录为基准。无需在部署机器另外安装 FFmpeg。
 
-上下文关联判断固定在首次 ChatRequest 前由 Agent 调用。Agent 从当前群的本地消息记录库读取截至当前消息发送时刻的最近 `ContextMessageCount` 条记录，排除当前消息；forward 本身算一条，其内部文本不另计数。取满指定数量后再跳过本次已读取的引用链消息，不补取。剩余记录中的 forward 按 `MaxForwardDepth` 和 `MaxForwardMessagesPerLayer` 展开，只提取普通消息及展开后的 forward 中的 text，图片、表情及其他非文本消息段均不作为候选；每条群消息提取的文本合并为一个候选，无文本的记录跳过后不补取。CQ 字符串按同样规则解析和展开。当前问题没有文本或过滤后没有候选时，直接发送 ChatRequest。其余情况传入 `query` 和按时间顺序排列的 `contexts`，通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`，只将相关文本按原始顺序放入系统提示词之后、引用消息之前；前置调用失败时不发送首个 ChatRequest。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。
+历史上下文固定在首次 ChatRequest 前由 Agent 准备。Agent 从当前群的本地消息记录库读取截至当前消息发送时刻的最近 `ContextMessageCount` 条记录，排除当前消息；forward 本身算一条，其内部消息段不另计数。取满指定数量后再跳过本次已读取的引用链消息，不补取。剩余记录中的 forward 按 `MaxForwardDepth` 和 `MaxForwardMessagesPerLayer` 展开，保留普通消息及展开后的 forward 中的文字、图片和表情，其他消息段仍不纳入；无这些内容的记录跳过后不补取。CQ 字符串按同样规则解析和展开。
+
+带图片或表情的记录直接纳入上下文，同条记录中的文字一起保留，不经过文本相关性筛选。普通图片、自定义表情包和商城表情 `mface` 通过现有图片上传与文件 ID 缓存流程作为图片输入，QQ 系统表情 `face` 转为 `[表情:名称]`，未知名称使用 `[表情]`。其余记录的文字按每条群消息合并为一个候选，传入 `query` 和按时间顺序排列的 `contexts`，通过百炼 DashScope 文本排序接口调用 `qwen3-rerank`，只保留相关文字消息。当前问题没有文本或没有纯文本候选时跳过关联判断，仍加入图片和表情记录。最终将直接保留的记录与相关文字消息按原始时间顺序合并，消息内部保持文字、图片和表情的相对顺序，放入系统提示词之后、引用消息之前；需要执行的前置关联调用失败时不发送首个 ChatRequest。`contextrelevance.local.json` 中的 `Endpoint` 为完整的北京地域业务空间专属地址，需填写对应的 `ApiKey`；`Model`、`RelevanceThreshold` 和 `Instruct` 分别控制模型、关联阈值和排序任务说明。
 
 工具返回 `hasRelatedContext`、`relevanceThreshold` 和按分数排列的 `results`，每项包含原始下标 `index`、`relevanceScore` 和 `isRelated`；分数达到 `RelevanceThreshold`（默认 `0.5`）时视为相关，任一候选相关时 `hasRelatedContext` 为 `true`。分数是当前请求内的相对排序分数，阈值需按实际对话效果调整，不表示关联概率。工具实现只负责关联判断，历史读取与上下文加入由 Agent 完成；example 和 local 中的 `Enabled` 保持 `false`，用于关闭主模型工具入口，不影响固定前置调用。前置调用沿用工具超时与请求总时限，计入首轮工具统计，下标为 `0`，主模型返回的工具调用从 `1` 开始。接口格式见[阿里云百炼文本排序文档](https://help.aliyun.com/zh/model-studio/text-rerank-api)。
 
@@ -182,7 +184,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 
 ### 引用、转发与图片
 
-引用消息通过 NapCat `get_msg` 逐层读取。模型消息顺序为系统提示词、较早引用、较近引用、当前请求；每层引用带发送者 QQ 和上下文说明。引用中的前缀不匹配也不移除。达到 `MaxReferenceDepth` 后使用已获取的内容；获取引用失败时回复“获取引用消息失败，请稍后再试”，不再请求模型。
+引用消息通过 NapCat `get_msg` 逐层读取。模型消息顺序为系统提示词、近期历史上下文、较早引用、较近引用、当前请求；每层引用带发送者 QQ 和上下文说明。引用中的前缀不匹配也不移除。达到 `MaxReferenceDepth` 后使用已获取的内容；获取引用失败时回复“获取引用消息失败，请稍后再试”，不再请求模型。
 
 合并转发通过 `get_forward_msg` 展开，节点标注群名片或昵称及发送者 QQ，并受深度与节点数限制。获取失败时以“合并转发消息，获取失败”的标记继续处理；更深层未展开内容使用省略标记。转发资源按 ID 缓存，命中后直接使用本地数据。
 
@@ -229,7 +231,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 
 统计库启用 WAL。回复发送成功后记录回复消息 ID，并在日志中输出本次请求的总输入、总输出 Token 和输入缓存命中率；输入缓存命中率使用命中输入 Token / 总输入 Token，缺少必要数据时显示未知。
 
-群消息记录与业务处理独立，保留发送时间、发送者信息、子类型、完整原始正文 JSON 和引用关系，包括未触发请求、机器人自身消息、允许列表内的黑名单群消息和未支持消息段。正文保留数组或 CQ 字符串原值，重复上报逐次插入；记录失败写入日志，不阻塞业务。Agent 在首次 ChatRequest 前仅从当前群的最近记录中选择关联的 text 作为历史上下文；不导入旧版数据库。
+群消息记录与业务处理独立，保留发送时间、发送者信息、子类型、完整原始正文 JSON 和引用关系，包括未触发请求、机器人自身消息、允许列表内的黑名单群消息和未支持消息段。正文保留数组或 CQ 字符串原值，重复上报逐次插入；记录失败写入日志，不阻塞业务。Agent 在首次 ChatRequest 前从当前群的最近记录中直接保留带图片或表情的记录，并筛选相关文字消息作为历史上下文；不导入旧版数据库。
 
 ## 项目结构与插件扩展
 

@@ -24,7 +24,7 @@ public class AgentConfig
     public int MaxForwardDepth { get; set; } = 5;
     /// <summary>单层合并转发最多展开的消息条数，超出部分截断。</summary>
     public int MaxForwardMessagesPerLayer { get; set; } = 20;
-    /// <summary>关联判断前读取的最近群消息记录数；forward 本身算一条，内部文本不另计数；引用链消息和非文本记录被跳过时仍占用名额，0 表示不读取。</summary>
+    /// <summary>关联判断前读取的最近群消息记录数；forward 本身算一条，内部消息段不另计数；保留文字、图片和表情，引用链消息和无这些内容的记录被跳过时仍占用名额，0 表示不读取。</summary>
     public int ContextMessageCount { get; set; } = 15;
     /// <summary>是否输出上下文关联判断的汇总、候选正文和逐条评分日志，默认关闭。</summary>
     public bool IsLogContextRelevanceResults { get; set; }
