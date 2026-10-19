@@ -13,6 +13,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+        <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" Private="false" ExcludeAssets="runtime" />
     </ItemGroup>
 
 </Project>

@@ -192,6 +192,12 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return ReadOptionalString(data, "card");
     }
 
+    public Task<string> GetUserAvatarUrlAsync(long userId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult($"https://q1.qlogo.cn/g?b=qq&nk={userId.ToString(CultureInfo.InvariantCulture)}&s=640");
+    }
+
     public async Task WaitForDisconnectAsync(CancellationToken cancellationToken)
     {
         var receiveTask = _receiveTask ?? throw new InvalidOperationException("NapCat 尚未建立连接。");
