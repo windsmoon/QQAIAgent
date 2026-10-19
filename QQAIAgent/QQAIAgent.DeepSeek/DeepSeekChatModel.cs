@@ -16,6 +16,8 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
 {
     #region fields
     private const string StorageSource = "QQAIAgent.DeepSeek";
+    /// <summary>对话接口允许的图片最长边像素数，超出会被拒绝。</summary>
+    private const int MaxImageSidePixels = 8192;
     private readonly HttpClient _httpClient;
     private readonly ImageFileStore _imageFilStore;
     private readonly ILogger<DeepSeekChatModel> _logger;
@@ -268,7 +270,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         return ParseResponse(document.RootElement);
     }
 
-    /// <summary>流式读取并上传图片，文件自创建起保留 30 天，下载和上传共用单次超时。</summary>
+    /// <summary>下载并上传图片，最长边超限时先等比缩小，文件自创建起保留 30 天，下载和上传共用单次超时。</summary>
     private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
@@ -299,10 +301,11 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
             throw new HttpRequestException($"下载原始图片失败：HTTP={(int)imageResponse.StatusCode}，响应={errorBody[..Math.Min(errorBody.Length, 2048)]}",
                 null, imageResponse.StatusCode);
         }
-        await using var imageStream = await imageResponse.Content.ReadAsStreamAsync(timeout.Token);
+        var imageBytes = await imageResponse.Content.ReadAsByteArrayAsync(timeout.Token);
+        // 对话接口限制图片最长边像素数，超限会被拒绝；按需等比缩小后再上传。
+        imageBytes = ImageResizer.Shrink(imageBytes, MaxImageSidePixels);
         using var uploadContent = new MultipartFormDataContent();
-        // 直接转发响应流，不落盘、不生成完整字节数组或 Base64 字符串。
-        uploadContent.Add(new StreamContent(imageStream), "file", "image");
+        uploadContent.Add(new ByteArrayContent(imageBytes), "file", "image");
         uploadContent.Add(new StringContent("user_data"), "purpose");
         uploadContent.Add(new StringContent("created_at"), "expires_after[anchor]");
         uploadContent.Add(new StringContent("2592000"), "expires_after[seconds]");
