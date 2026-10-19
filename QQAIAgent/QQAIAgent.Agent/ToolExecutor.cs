@@ -14,6 +14,7 @@ public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IRead
     public async Task<IReadOnlyList<ChatMessage>> ExecuteAsync(IReadOnlyList<ChatToolCall> toolCalls, ToolContext context, string requestId, string modelCallId, CancellationToken cancellationToken, bool isPreprocessing = false)
     {
         var messages = new List<ChatMessage>(toolCalls.Count);
+        var imageContents = new List<ChatContent>();
         // 首轮前置调用占用下标 0，主模型返回的工具调用仍从 1 开始，避免统计唯一键冲突。
         var callIndex = 0;
         foreach (var toolCall in toolCalls)
@@ -48,7 +49,16 @@ public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IRead
                     try
                     {
                         // 工具未响应取消时也结束等待；工具自身仍需配合取消，才能停止实际工作。
-                        content = await tool.ExecuteAsync(toolCall.ArgumentsJson, context, timeout.Token).WaitAsync(timeout.Token);
+                        var result = await tool.ExecuteAsync(toolCall.ArgumentsJson, context, timeout.Token).WaitAsync(timeout.Token);
+                        content = result.Text;
+                        if (result.ImageUrls.Count > 0)
+                        {
+                            imageContents.Add(new ChatTextContent { Text = $"[工具 {toolCall.Name}（调用 ID：{toolCall.Id}）返回的图片，详情见对应工具结果]" });
+                            foreach (var url in result.ImageUrls)
+                            {
+                                imageContents.Add(new ChatImageContent { Url = url });
+                            }
+                        }
                         status = "completed";
                         logger.LogInformation("工具执行完成：结果字符数={ContentLength}，耗时={ElapsedMilliseconds:F0} ms",
                             content?.Length ?? 0, Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
@@ -89,6 +99,12 @@ public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IRead
                 ToolCallId = toolCall.Id,
                 ContentList = [new ChatTextContent { Text = content }]
             });
+        }
+
+        // 当前模型适配仅允许 User 消息携带图片；必须先补齐本轮所有 Tool 结果，再追加图片。
+        if (imageContents.Count > 0)
+        {
+            messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = imageContents });
         }
 
         return messages;

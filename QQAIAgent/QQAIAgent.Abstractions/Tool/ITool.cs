@@ -8,7 +8,7 @@ public interface ITool
     #endregion
 
     #region methods
-    /// <summary>接收调用参数 JSON 和本条用户消息的上下文，返回可作为工具结果消息内容的文本或 JSON。</summary>
-    Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken);
+    /// <summary>接收调用参数 JSON 和本条用户消息的上下文，返回文本或 JSON，以及需要交给模型读取的图片地址。</summary>
+    Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken);
     #endregion
 }

@@ -11,7 +11,7 @@ public sealed class GetAvatarTool(IMessageReader messageReader) : ITool
     #endregion
 
     #region methods
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
@@ -22,7 +22,7 @@ public sealed class GetAvatarTool(IMessageReader messageReader) : ITool
         }
 
         var url = await messageReader.GetUserAvatarUrlAsync(userId, cancellationToken);
-        return JsonSerializer.Serialize(new { userId, url });
+        return new ToolResult(JsonSerializer.Serialize(new { userId, url })) { ImageUrls = [url] };
     }
     #endregion
 }

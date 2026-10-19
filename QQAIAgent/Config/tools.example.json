@@ -16,7 +16,7 @@
   {
     "Name": "get_avatar",
     "TimeoutSeconds": 5,
-    "Description": "根据 QQ 号获取用户头像图片 URL，返回 userId 和 url。user_id 必须使用消息或上下文中已知的 QQ 号，不能根据昵称猜测。此工具只返回头像地址，不分析图片内容，也不验证账号是否存在。",
+    "Description": "根据 QQ 号获取用户头像，返回 userId 和 url，并将头像图片提供给模型查看。user_id 必须使用消息或上下文中已知的 QQ 号，不能根据昵称猜测。不验证账号是否存在；若图片读取失败，不得猜测图片内容。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"user_id\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"需要获取头像的用户 QQ 号\"}},\"required\":[\"user_id\"],\"additionalProperties\":false}",
     "Enabled": true
   },

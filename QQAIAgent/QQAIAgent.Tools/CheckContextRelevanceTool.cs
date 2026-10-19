@@ -30,7 +30,7 @@ public sealed class CheckContextRelevanceTool : ITool, IDisposable
     }
 
     /// <summary>对 Agent 传入的候选上下文进行百炼 rerank 排序，按配置阈值判断与问题的关联性。</summary>
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
@@ -90,12 +90,12 @@ public sealed class CheckContextRelevanceTool : ITool, IDisposable
             results.Add(new { index, relevanceScore, isRelated });
         }
 
-        return JsonSerializer.Serialize(new
+        return new ToolResult(JsonSerializer.Serialize(new
         {
             hasRelatedContext,
             relevanceThreshold = config.RelevanceThreshold,
             results
-        });
+        }));
     }
 
     public void Dispose()

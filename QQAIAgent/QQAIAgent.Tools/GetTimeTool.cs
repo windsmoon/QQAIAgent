@@ -9,10 +9,10 @@ public sealed class GetTimeTool : ITool
     #endregion
 
     #region methods
-    public Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(DateTimeOffset.Now.ToString("O"));
+        return Task.FromResult(new ToolResult(DateTimeOffset.Now.ToString("O")));
     }
     #endregion
 }

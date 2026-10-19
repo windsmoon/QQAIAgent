@@ -17,7 +17,7 @@ public sealed class SearchGroupMessagesTool(IGroupMessageQuery messageQuery) : I
     #endregion
 
     #region methods
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (context.GroupId <= 0)
@@ -73,7 +73,7 @@ public sealed class SearchGroupMessagesTool(IGroupMessageQuery messageQuery) : I
             }
 
             var total = await messageQuery.CountAsync(context.GroupId, filter, cancellationToken);
-            return JsonSerializer.Serialize(new { groupId = context.GroupId, operation, total }, ResultOptions);
+            return new ToolResult(JsonSerializer.Serialize(new { groupId = context.GroupId, operation, total }, ResultOptions));
         }
 
         var limit = ReadInteger(root, "limit") ?? 20;
@@ -90,7 +90,7 @@ public sealed class SearchGroupMessagesTool(IGroupMessageQuery messageQuery) : I
         }
 
         var result = await messageQuery.SearchAsync(context.GroupId, filter, (int)limit, (int)offset, order == "asc", cancellationToken);
-        return JsonSerializer.Serialize(new
+        return new ToolResult(JsonSerializer.Serialize(new
         {
             groupId = context.GroupId,
             operation,
@@ -101,7 +101,7 @@ public sealed class SearchGroupMessagesTool(IGroupMessageQuery messageQuery) : I
             result.HasMore,
             nextOffset = result.HasMore && offset + limit <= 10000 ? (long?)(offset + limit) : null,
             result.Messages
-        }, ResultOptions);
+        }, ResultOptions));
     }
 
     private static string ReadString(JsonElement root, string name)
