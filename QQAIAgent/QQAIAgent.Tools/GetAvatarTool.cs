@@ -22,7 +22,7 @@ public sealed class GetAvatarTool(IMessageReader messageReader) : ITool
         }
 
         var url = await messageReader.GetUserAvatarUrlAsync(userId, cancellationToken);
-        return new ToolResult(JsonSerializer.Serialize(new { userId, url })) { ImageUrls = [url] };
+        return new ToolResult(JsonSerializer.Serialize(string.Empty)) { ImageUrls = [url] };
     }
     #endregion
 }
