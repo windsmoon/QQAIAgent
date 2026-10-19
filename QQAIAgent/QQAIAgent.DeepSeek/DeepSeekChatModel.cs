@@ -264,7 +264,13 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
         using var httpResponse = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        httpResponse.EnsureSuccessStatusCode();
+        if (httpResponse.IsSuccessStatusCode == false)
+        {
+            // 保留 DS 的完整错误正文，由上层现有异常日志输出具体拒绝原因。
+            var errorBody = await httpResponse.Content.ReadAsStringAsync(timeout.Token);
+            throw new HttpRequestException($"DeepSeek 模型请求失败：HTTP={(int)httpResponse.StatusCode} ({httpResponse.ReasonPhrase})，响应={errorBody}",
+                null, httpResponse.StatusCode);
+        }
         await using var responseStream = await httpResponse.Content.ReadAsStreamAsync(timeout.Token);
         using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
         return ParseResponse(document.RootElement);
