@@ -17,7 +17,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     #region fields
     private const string StorageSource = "QQAIAgent.DeepSeek";
     /// <summary>对话接口允许的图片最长边像素数，超出会被拒绝。</summary>
-    private const int MaxImageSidePixels = 8192;
+    private const int MaxImageSidePixels = 8000;
     private readonly HttpClient _httpClient;
     private readonly ImageFileStore _imageFilStore;
     private readonly ILogger<DeepSeekChatModel> _logger;
