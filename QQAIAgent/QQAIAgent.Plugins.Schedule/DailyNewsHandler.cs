@@ -27,19 +27,43 @@ public sealed class DailyNewsHandler(IMessageSender messageSender, AgentConfig a
             return;
         }
 
-        // 每次任务执行只请求一次新闻接口，各群发送本次响应中的同一张图片。
-        var json = await _httpClient.GetStringAsync($"{task.Parameter}?encoding=json", cancellationToken);
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-        if (root.GetProperty("code").GetInt32() != 200)
+        // 按配置顺序尝试接口，首次成功后停止切换，各群共用本次取得的图片地址。
+        var endpoints = task.Parameter.Split('-', StringSplitOptions.TrimEntries);
+        var imageUrl = string.Empty;
+        for (var index = 0; index < endpoints.Length; index++)
         {
-            throw new InvalidOperationException($"每日新闻接口获取失败：{root.GetProperty("message").GetString()}");
-        }
+            try
+            {
+                var json = await _httpClient.GetStringAsync($"{endpoints[index]}?encoding=json", cancellationToken);
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+                if (root.GetProperty("code").GetInt32() != 200)
+                {
+                    throw new InvalidOperationException($"每日新闻接口获取失败：{root.GetProperty("message").GetString()}");
+                }
 
-        var imageUrl = root.GetProperty("data").GetProperty("image").GetString();
-        if (string.IsNullOrWhiteSpace(imageUrl))
-        {
-            throw new InvalidDataException("每日新闻接口返回的图片地址为空。");
+                imageUrl = root.GetProperty("data").GetProperty("image").GetString();
+                if (string.IsNullOrWhiteSpace(imageUrl))
+                {
+                    throw new InvalidDataException("每日新闻接口返回的图片地址为空。");
+                }
+
+                break;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                if (index == endpoints.Length - 1)
+                {
+                    throw;
+                }
+
+                logger.LogWarning(exception, "每日新闻接口获取失败，尝试下一个：任务={TaskId}，接口={Endpoint}，下一接口={NextEndpoint}",
+                    task.Id, endpoints[index], endpoints[index + 1]);
+            }
         }
 
         var hasAttemptedSend = false;

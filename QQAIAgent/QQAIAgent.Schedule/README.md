@@ -100,11 +100,15 @@ Host 启动时读取运行目录下的 `Config/schedule.local.json`，加载插�
 
 ## 每天 60 秒读懂世界
 
-示例与本地配置包含 `daily-60s-news`，使用 `QQAIAgent.Plugins.Schedule` 类库中的插件处理器 `SendDailyNews`，每天 `10:30` 执行；当前 `TimeZone: "+8"` 对应北京时间。`GroupIds: [-1]` 表示发送到 `AgentConfig.AllowedGroups` 中的所有群，也可通过 `ExcludedGroupIds` 排除群。
+示例与本地配置包含 `daily-60s-news`，使用 `QQAIAgent.Plugins.Schedule` 类库中的插件处理器 `SendDailyNews`，每天按 `Time` 配置执行；当前 `TimeZone: "+8"` 对应北京时间。`GroupIds: [-1]` 表示发送到 `AgentConfig.AllowedGroups` 中的所有群，也可通过 `ExcludedGroupIds` 排除群。
 
 该类库与 Tool 插件使用同一加载机制，Host 构建与发布时将其输出复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，启动时自动发现 `DailyNewsHandler`，无需在 `Program.cs` 中注册具体处理器。
 
-处理器每次执行时主动请求 `https://60s.7se.cn/v2/60s?encoding=json`，按 [60s API 文档](https://docs.60s-api.viki.moe/254026209e0) 从成功响应的 `data.image` 读取新闻图片地址，再复用 `IMessageSender.SendGroupImageAsync`，由 NapCat 下载并作为图片消息发送。图片地址来自本次 API 响应，不在任务配置中填写；实例域名暂时在处理器中使用 `60s.7se.cn`。每次执行只请求一次新闻 API，超时为 30 秒，并响应任务取消；无目标群时不请求。获取失败或图片地址为空时本次任务失败，不发送图片。各目标群使用同一张图片，不发送链接文本、不引用或艾特用户。
+`Parameter` 配置多个新闻 API 地址，用 `-` 分隔，处理器拆成数组后按顺序请求，并在每个地址后追加 `?encoding=json`。当前顺序为 `60s.crystelf.top`、`api.elysiayanyu.top`、`api.cczo.cc/60s`、`60s.zellon.top`、`60s.superjeason.qzz.io`、`60s.okbaike.com`，各地址包含 `/v2/60s` 路径。
+
+每个接口超时为 30 秒；网络错误、超时、响应解析失败、业务状态失败或图片地址为空时记录警告并尝试下一个接口。首次成功后停止切换；全部失败时将最后一次异常交给调度器记录，本次不发送图片。任务取消时立即退出，不尝试后续接口；无目标群时不请求。
+
+处理器按 [60s API 文档](https://docs.60s-api.viki.moe/254026209e0) 从成功响应的 `data.image` 读取新闻图片地址，再复用 `IMessageSender.SendGroupImageAsync`，由 NapCat 下载并作为图片消息发送。图片地址来自本次 API 响应，不在任务配置中填写。各目标群使用同一张图片，不发送链接文本、不引用或艾特用户；群消息发送失败不会重新获取新闻或切换 API。
 
 图片任务沿用目标群排除规则与群间 3～10 秒随机间隔；单群失败记录警告并继续后续群，不自动重试。需要部署更新后的程序与配置并重启后生效，运行期间保持程序和 NapCat 在线；错过的每日任务不补发。
 
