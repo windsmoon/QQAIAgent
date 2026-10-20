@@ -18,7 +18,7 @@
 - `GroupIds`：目标群号。仅 `[-1]` 表示 `AgentConfig.AllowedGroups` 中配置的所有群；空列表不发送，`-1` 与其他元素混合时不表示所有群。
 - `ExcludedGroupIds`：排除的群号列表，默认为空。先确定目标群，再跳过其中被排除的群；指定群和所有群两种配置均适用。
 - `Text`：传给业务回调的文本，默认为空字符串。发送消息任务将其作为消息正文；`SummarizeGroupMessages` 将其作为 LLM 系统提示词。调度器本身不解释文本或发送消息。
-- `ImageUrl`：`DaliyNews` 使用的图片网络地址，支持返回图片的接口地址；为空时不发送。
+- `ImageUrl`：`SendDailyNews` 使用的图片网络地址，支持返回图片的接口地址；为空时不发送。
 
 读取配置时注册 `JsonStringEnumConverter`，以支持 `DaysOfWeek` 中的星期名称：
 
@@ -101,9 +101,9 @@ Host 启动时读取运行目录下的 `Config/schedule.local.json`，加载插�
 
 ## 每天 60 秒读懂世界
 
-示例与本地配置包含 `daily-60s-news`，使用 `QQAIAgent.Plugins.Schedule` 类库中的插件处理器 `DaliyNews`，每天 `10:30` 执行；当前 `TimeZone: "+8"` 对应北京时间。`GroupIds: [-1]` 表示发送到 `AgentConfig.AllowedGroups` 中的所有群，也可通过 `ExcludedGroupIds` 排除群。
+示例与本地配置包含 `daily-60s-news`，使用 `QQAIAgent.Plugins.Schedule` 类库中的插件处理器 `SendDailyNews`，每天 `10:30` 执行；当前 `TimeZone: "+8"` 对应北京时间。`GroupIds: [-1]` 表示发送到 `AgentConfig.AllowedGroups` 中的所有群，也可通过 `ExcludedGroupIds` 排除群。
 
-该类库与 Tool 插件使用同一加载机制，Host 构建与发布时将其输出复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，启动时自动发现 `DaliyNewsHandler`，无需在 `Program.cs` 中注册具体处理器。
+该类库与 Tool 插件使用同一加载机制，Host 构建与发布时将其输出复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，启动时自动发现 `DailyNewsHandler`，无需在 `Program.cs` 中注册具体处理器。
 
 `ImageUrl` 暂时配置为 `https://60s.7se.cn/v2/60s?encoding=image`。按 [60s API 文档](https://docs.60s-api.viki.moe/254026209e0)，该接口会重定向到新闻图片直链，由 NapCat 下载并作为图片消息发送，不发送链接文本、不引用或艾特用户。发送时使用 `cache: "0"`，避免固定 URL 复用旧图片。更换实例时修改 `ImageUrl` 即可，需同步修改 example 与 local 配置。
 

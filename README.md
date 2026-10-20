@@ -249,7 +249,7 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 | `DeepSeek` | DeepSeek HTTP 模型适配 |
 | `QQAIAgent.Tools` | 七个内置工具的插件实现 |
 | `QQAIAgent.Schedule` | 定时调度服务与 `IScheduleHandler` 插件契约 |
-| `QQAIAgent.Plugins.Schedule` | 具体业务定时任务插件，目前包含 `DaliyNews` |
+| `QQAIAgent.Plugins.Schedule` | 具体业务定时任务插件，目前包含 `SendDailyNews` |
 | `Third` | 第三方程序的本地存放目录 |
 
 Host 直接注册 `DeepSeekChatModel` 为 `IChatModel` 单例；工具通过插件目录加载。当前插件契约见 [ITool.cs](QQAIAgent/QQAIAgent.Abstractions/Tool/ITool.cs)：

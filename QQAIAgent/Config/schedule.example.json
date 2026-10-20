@@ -4,7 +4,7 @@
   "Tasks": [
     {
       "Id": "daily-60s-news",
-      "FunctionName": "SendDaliyNews",
+      "FunctionName": "SendDailyNews",
       "Enabled": true,
       "GroupIds": [-1],
       "ExcludedGroupIds": [],
