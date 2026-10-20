@@ -18,7 +18,6 @@
 - `GroupIds`：目标群号。仅 `[-1]` 表示 `AgentConfig.AllowedGroups` 中配置的所有群；空列表不发送，`-1` 与其他元素混合时不表示所有群。
 - `ExcludedGroupIds`：排除的群号列表，默认为空。先确定目标群，再跳过其中被排除的群；指定群和所有群两种配置均适用。
 - `Text`：传给业务回调的文本，默认为空字符串。发送消息任务将其作为消息正文；`SummarizeGroupMessages` 将其作为 LLM 系统提示词。调度器本身不解释文本或发送消息。
-- `ImageUrl`：`SendDailyNews` 使用的图片网络地址，支持返回图片的接口地址；为空时不发送。
 
 读取配置时注册 `JsonStringEnumConverter`，以支持 `DaysOfWeek` 中的星期名称：
 
@@ -105,7 +104,7 @@ Host 启动时读取运行目录下的 `Config/schedule.local.json`，加载插�
 
 该类库与 Tool 插件使用同一加载机制，Host 构建与发布时将其输出复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，启动时自动发现 `DailyNewsHandler`，无需在 `Program.cs` 中注册具体处理器。
 
-`ImageUrl` 暂时配置为 `https://60s.7se.cn/v2/60s?encoding=image`。按 [60s API 文档](https://docs.60s-api.viki.moe/254026209e0)，该接口会重定向到新闻图片直链，由 NapCat 下载并作为图片消息发送，不发送链接文本、不引用或艾特用户。发送时使用 `cache: "0"`，避免固定 URL 复用旧图片。更换实例时修改 `ImageUrl` 即可，需同步修改 example 与 local 配置。
+处理器每次执行时主动请求 `https://60s.7se.cn/v2/60s?encoding=json`，按 [60s API 文档](https://docs.60s-api.viki.moe/254026209e0) 从成功响应的 `data.image` 读取新闻图片地址，再复用 `IMessageSender.SendGroupImageAsync`，由 NapCat 下载并作为图片消息发送。图片地址来自本次 API 响应，不在任务配置中填写；实例域名暂时在处理器中使用 `60s.7se.cn`。每次执行只请求一次新闻 API，超时为 30 秒，并响应任务取消；无目标群时不请求。获取失败或图片地址为空时本次任务失败，不发送图片。各目标群使用同一张图片，不发送链接文本、不引用或艾特用户。
 
 图片任务沿用目标群排除规则与群间 3～10 秒随机间隔；单群失败记录警告并继续后续群，不自动重试。需要部署更新后的程序与配置并重启后生效，运行期间保持程序和 NapCat 在线；错过的每日任务不补发。
 
