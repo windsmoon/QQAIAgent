@@ -8,12 +8,13 @@ using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Messaging;
+using QQAIAgent.NapCat.Config;
 using QQAIAgent.Schedule;
 
 namespace QQAIAgent.Host.Schedule;
 
 public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore, IChatModel chatModel,
-    IMessageSender messageSender, AgentConfig agentConfig, ScheduleConfig scheduleConfig,
+    IMessageSender messageSender, AgentConfig agentConfig, NapCatConfig napCatConfig, ScheduleConfig scheduleConfig,
     ILogger<SummarizeGroupMessagesHandler> logger) : IScheduleHandler
 {
     #region fields
@@ -78,7 +79,7 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
                     foreach (var message in page)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        if (string.IsNullOrWhiteSpace(message.Text))
+                        if (message.SenderId == napCatConfig.BotAccount || string.IsNullOrWhiteSpace(message.Text))
                         {
                             continue;
                         }
@@ -97,7 +98,7 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
                         messageCount++;
                     }
 
-                    // 偏移量按数据库记录数推进，非文本消息也占一条记录。
+                    // 偏移量按数据库记录数推进，秘书发言和非文本消息也占一条记录。
                     offset += page.Count;
                     // 说明数据不够这么多了，取完了
                     if (page.Count < pageSize)
