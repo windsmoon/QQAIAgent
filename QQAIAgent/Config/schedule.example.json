@@ -9,8 +9,8 @@
       "GroupIds": [-1],
       "ExcludedGroupIds": [],
       "ScheduleType": "Daily",
-      "Time": "10:30",
-      "Parameter": "https://60s.7se.cn/v2/60s"
+      "Time": "10:00",
+      "Parameter": "https://60s.crystelf.top/v2/60s"
     },
     {
       "Id": "daily-good-morning",
