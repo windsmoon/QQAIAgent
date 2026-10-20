@@ -7,7 +7,7 @@
 1. 安装并登录 NapCat，开启正向 WebSocket 服务，记下地址、访问令牌和机器人 QQ 号。
 2. 从源码运行时安装 .NET 10 SDK，用 Rider 打开 `QQAIAgent/QQAIAgent.sln`。部署依赖框架的发布版本时，服务器需安装 .NET 10 运行时。
 3. 按下节说明，将 `QQAIAgent/Config/` 中的 example 文件复制为 local 文件并填写配置。
-4. 本地运行 `QQAIAgent.Host`；服务器部署该项目的完整发布输出，再在程序目录运行 `QQAIAgent.Host.exe`。构建与发布会复制配置和内置工具插件，部署时保留 `Config/`、`Plugins/`、`appsettings.json` 及全部运行依赖。
+4. 本地运行 `QQAIAgent.Host`；服务器部署该项目的完整发布输出，再在程序目录运行 `QQAIAgent.Host.exe`。构建与发布会复制配置、工具插件和定时任务插件，部署时保留 `Config/`、`Plugins/`、`appsettings.json` 及全部运行依赖。
 
 启动后会连接 NapCat 并核验机器人账号。普通模式在允许的群内发送 `123 你好`，测试模式发送 `321 你好`。业务配置固定从程序目录的 `Config/` 读取，不依赖启动时的工作目录。
 
@@ -248,6 +248,8 @@ ffprobe 随项目放在 [Third/FFmpeg](Third/FFmpeg/README.md)，Host 构建和�
 | `QQAIAgent.NapCat` | NapCat WebSocket 与协议解析 |
 | `DeepSeek` | DeepSeek HTTP 模型适配 |
 | `QQAIAgent.Tools` | 七个内置工具的插件实现 |
+| `QQAIAgent.Schedule` | 定时调度服务与 `IScheduleHandler` 插件契约 |
+| `QQAIAgent.Plugins.Schedule` | 具体业务定时任务插件，目前包含 `DaliyNews` |
 | `Third` | 第三方程序的本地存放目录 |
 
 Host 直接注册 `DeepSeekChatModel` 为 `IChatModel` 单例；工具通过插件目录加载。当前插件契约见 [ITool.cs](QQAIAgent/QQAIAgent.Abstractions/Tool/ITool.cs)：
@@ -267,6 +269,8 @@ Task<string> ExecuteAsync(string argumentsJson, ToolContext context, Cancellatio
 4. 若需随 Host 构建与发布，在 Host 的项目引用中设置 `ReferenceOutputAssembly=false`、`Private=false` 和 `OutputItemType=ToolPluginAssembly`，沿用内置插件的复制流程。
 
 Host 只扫描 `Plugins/` 的直接子目录，没有同名入口 DLL 的目录会跳过。每个插件使用独立 `AssemblyLoadContext` 解析依赖，共享宿主的契约程序集；工具作为单例注册，同一实例可能被多个请求并发调用，临时状态应放在方法内部或请求上下文中。
+
+具体业务定时任务优先采用同样的第三方插件扩展方式，实现 `IScheduleHandler` 并在 `schedule.local.json` 中配置对应 `FunctionName`。`QQAIAgent.Plugins.Schedule` 随 Host 构建与发布复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，由加载器自动发现处理器；新建独立插件类库也可使用相同流程，无需在 Host 中注册具体实现。详见 [定时任务插件说明](QQAIAgent/QQAIAgent.Schedule/README.md#外部定时任务插件)。
 
 ## 使用协议
 

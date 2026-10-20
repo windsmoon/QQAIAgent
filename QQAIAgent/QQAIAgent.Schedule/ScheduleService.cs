@@ -258,7 +258,7 @@ public class ScheduleService
             Time = task.Time,
             Date = task.Date,
             DaysOfWeek = [.. task.DaysOfWeek],
-            Text = task.Text
+            Parameter = task.Parameter,
         };
     }
     #endregion

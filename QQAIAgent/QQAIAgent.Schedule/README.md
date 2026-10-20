@@ -18,6 +18,7 @@
 - `GroupIds`：目标群号。仅 `[-1]` 表示 `AgentConfig.AllowedGroups` 中配置的所有群；空列表不发送，`-1` 与其他元素混合时不表示所有群。
 - `ExcludedGroupIds`：排除的群号列表，默认为空。先确定目标群，再跳过其中被排除的群；指定群和所有群两种配置均适用。
 - `Text`：传给业务回调的文本，默认为空字符串。发送消息任务将其作为消息正文；`SummarizeGroupMessages` 将其作为 LLM 系统提示词。调度器本身不解释文本或发送消息。
+- `ImageUrl`：`DaliyNews` 使用的图片网络地址，支持返回图片的接口地址；为空时不发送。
 
 读取配置时注册 `JsonStringEnumConverter`，以支持 `DaysOfWeek` 中的星期名称：
 
@@ -98,19 +99,31 @@ Host 启动时读取运行目录下的 `Config/schedule.local.json`，加载插�
 
 配置使用 `TimeZone` 表示固定 UTC 偏移。修改本地配置后需重启程序；配置文件随 Host 构建和发布复制到运行目录。退出时只停止调度并通知取消，不等待已派发的任务回调结束。
 
+## 每天 60 秒读懂世界
+
+示例与本地配置包含 `daily-60s-news`，使用 `QQAIAgent.Plugins.Schedule` 类库中的插件处理器 `DaliyNews`，每天 `10:30` 执行；当前 `TimeZone: "+8"` 对应北京时间。`GroupIds: [-1]` 表示发送到 `AgentConfig.AllowedGroups` 中的所有群，也可通过 `ExcludedGroupIds` 排除群。
+
+该类库与 Tool 插件使用同一加载机制，Host 构建与发布时将其输出复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，启动时自动发现 `DaliyNewsHandler`，无需在 `Program.cs` 中注册具体处理器。
+
+`ImageUrl` 暂时配置为 `https://60s.7se.cn/v2/60s?encoding=image`。按 [60s API 文档](https://docs.60s-api.viki.moe/254026209e0)，该接口会重定向到新闻图片直链，由 NapCat 下载并作为图片消息发送，不发送链接文本、不引用或艾特用户。发送时使用 `cache: "0"`，避免固定 URL 复用旧图片。更换实例时修改 `ImageUrl` 即可，需同步修改 example 与 local 配置。
+
+图片任务沿用目标群排除规则与群间 3～10 秒随机间隔；单群失败记录警告并继续后续群，不自动重试。需要部署更新后的程序与配置并重启后生效，运行期间保持程序和 NapCat 在线；错过的每日任务不补发。
+
 ## 每日群发言总结
 
 内置处理器 `SummarizeGroupMessages` 使用数据库中的发言生成总结，并发送回原群。示例与本地配置已加入 `daily-group-summary`：使用 `Weekly` 和全部七个星期，每天 `12:00` 执行，默认 `GroupIds: [-1]`，可通过 `ExcludedGroupIds` 排除群。
 
 - 日期范围按全局 `TimeZone` 计算，为执行当天的前一个自然日 00:00:00～23:59:59，不是执行前 24 小时。所有目标群使用同一日期范围。
-- 从各群的消息数据库按时间、记录 Id 升序分页读取完整文本，单条正文不受搜索工具的 2000 字预览限制。只总结数据库已记录的文本，不下载图片、语音或展开合并转发。
+- 从各群的消息数据库按时间、记录 Id 升序分页读取完整文本，单条正文不受搜索工具的 2000 字预览限制。按 `NapCatConfig.BotAccount` 排除秘书自身发言，仅将其他成员的文本交给模型进行总结和金句评选。只总结数据库已记录的文本，不下载图片、语音或展开合并转发。
 - 每个群独立调用 `IChatModel.CompleteAsync`，`Text` 原样作为系统提示词，发言日期、发言人、时间和正文作为待总结资料，不混入其他群的记录，也不使用 Agent 的聊天系统提示词。
 - 使用现有模型配置，思考强度沿用 `AgentConfig.FirstReasoningEffort`，不启用工具调用。当前每个群将全部文本放入一次模型请求，输入仍受所配置模型的上下文长度限制，未做分段归纳。
-- 空白 `Text` 不执行；没有文本发言的群只记录跳过日志，不请求模型、不发送消息。只有模型正常完成且返回非空文本时才发送，截断或中断结果不发送。
+- 空白 `Text` 不执行；排除秘书自身发言后没有文本发言的群只记录跳过日志，不请求模型、不发送消息。只有模型正常完成且返回非空文本时才发送，截断或中断结果不发送。
 - 发送结果不引用消息、不艾特用户。群之间的发送尝试保留 3～10 秒随机等待；单个群查询、模型请求或发送失败会记录日志并继续其他群，不自动重试。
 - 处理器通过 DI 注册进 `FunctionName` 字典；更改 `Text` 或群配置后需要重启程序。仅修改配置不能使旧版程序获得此处理器，部署时需同时更新程序。
 
 ## 外部定时任务插件
+
+后续具体业务定时任务优先作为插件扩展，可加入 `QQAIAgent.Plugins.Schedule` 或建立独立插件类库；调度服务与契约保留在 `QQAIAgent.Schedule` 中。
 
 外部类库以 .NET 10 为目标框架，开启 `EnableDynamicLoading`，引用与宿主一致的 `QQAIAgent.Schedule`，并公开实现 `IScheduleHandler` 的非抽象、非开放泛型类。每个实现提供固定的 `FunctionName` 和 `ExecuteAsync`；业务依赖通过构造函数注入，不需要在 Host 中逐个注册外部类。
 
@@ -159,7 +172,7 @@ Plugins/
 
 - 统一加载器每个插件入口 DLL 只加载一次，同时发现 Tool 和定时任务实现；一个 DLL 可以包含多个实现，两类实现的名称空间互相独立。
 - 处理器通过 DI 创建为单例，启动时构建 `FunctionName` 字典。重复名称（包括与内置处理器重名）会导致启动失败，不覆盖已注册实现。
-- 加载上下文共享宿主的 `QQAIAgent.Abstractions`、`QQAIAgent.Schedule`、`QQAIAgent.Messaging` 和日志抽象程序集。插件可以注入宿主已注册的公共服务，例如 `IMessageSender`、`IGroupMessageQuery`、`ILogger<T>`；新增的插件私有业务依赖不会自动注册。
+- 加载上下文共享宿主的 `QQAIAgent.Abstractions`、`QQAIAgent.Schedule`、`QQAIAgent.Messaging`、`QQAIAgent.Agent` 和日志抽象程序集。插件可以注入宿主已注册的公共服务与配置，例如 `IMessageSender`、`IGroupMessageQuery`、`AgentConfig`、`ILogger<T>`；引用这些宿主项目时使用 `Private="false"`、`ExcludeAssets="runtime"`，避免重复携带宿主程序集。新增的插件私有业务依赖不会自动注册。
 - 同一实例可能被不同 Id 的任务并发调用，每次执行的临时状态应保存在方法局部变量中，并响应传入的取消令牌。
 - 插件与配置在启动时加载，更换 DLL 或修改配置后需要重启；不支持热加载。
 - 直接使用 `ScheduleService.AddOrUpdate` 时仍可传入任意回调，`FunctionName` 只是任务数据，调度器本身不查找插件。

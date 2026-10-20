@@ -3,6 +3,16 @@
   "TimeZone": "+8",
   "Tasks": [
     {
+      "Id": "daily-60s-news",
+      "FunctionName": "SendDaliyNews",
+      "Enabled": true,
+      "GroupIds": [-1],
+      "ExcludedGroupIds": [],
+      "ScheduleType": "Daily",
+      "Time": "10:30",
+      "ImageUrl": "https://60s.7se.cn/v2/60s?encoding=image"
+    },
+    {
       "Id": "daily-good-morning",
       "FunctionName": "SendGroupMessage",
       "Enabled": true,

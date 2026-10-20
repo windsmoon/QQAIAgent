@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using QQAIAgent.Abstractions.Tool;
+using QQAIAgent.Agent.Config;
 using QQAIAgent.Messaging;
 using QQAIAgent.Schedule;
 
@@ -16,6 +17,7 @@ internal sealed class PluginLoadContext(string pluginPath) : AssemblyLoadContext
         typeof(ITool).Assembly,
         typeof(IScheduleHandler).Assembly,
         typeof(IMessageSender).Assembly,
+        typeof(AgentConfig).Assembly,
         typeof(ILogger).Assembly
     ];
     #endregion

@@ -20,6 +20,7 @@
       <ProjectReference Include="..\QQAIAgent.Schedule\QQAIAgent.Schedule.csproj" />
       <ProjectReference Include="..\QQAIAgent.DeepSeek\QQAIAgent.DeepSeek.csproj" />
       <ProjectReference Include="..\QQAIAgent.Tools\QQAIAgent.Tools.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="ToolPluginAssembly" />
+      <ProjectReference Include="..\QQAIAgent.Plugins.Schedule\QQAIAgent.Plugins.Schedule.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="ToolPluginAssembly" />
     </ItemGroup>
 
     <ItemGroup>

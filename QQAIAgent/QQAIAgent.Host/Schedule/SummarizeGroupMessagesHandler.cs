@@ -32,7 +32,7 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
     #region methods
     public async Task ExecuteAsync(ScheduleTask task, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(task.Text))
+        if (string.IsNullOrWhiteSpace(task.Parameter))
         {
             return;
         }
@@ -120,7 +120,7 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
                 {
                     Messages =
                     [
-                        new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = task.Text }] },
+                        new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = task.Parameter }] },
                         new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = stringBuilder.ToString() }] }
                     ],
                     ReasoningEffort = agentConfig.FirstReasoningEffort
