@@ -221,6 +221,14 @@ public class ScheduleService
             return execution > after ? execution : null;
         }
 
+        if (task.ScheduleType == ScheduleType.Daily)
+        {
+            // 按配置的 UTC 偏移确定今天的执行时间，已经到达或错过时安排到明天。
+            var date = DateOnly.FromDateTime(localAfter.DateTime);
+            var execution = new DateTimeOffset(date.ToDateTime(time), _utcOffset).ToUniversalTime();
+            return execution > after ? execution : execution.AddDays(1);
+        }
+
         if (task.ScheduleType != ScheduleType.Weekly)
         {
             return null;
