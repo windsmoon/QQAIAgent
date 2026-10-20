@@ -104,6 +104,8 @@ Host 启动时读取运行目录下的 `Config/schedule.local.json`，加载插�
 
 该类库与 Tool 插件使用同一加载机制，Host 构建与发布时将其输出复制到 `Plugins/QQAIAgent.Plugins.Schedule/`，启动时自动发现 `DailyNewsHandler`，无需在 `Program.cs` 中注册具体处理器。
 
+该插件通过 `DisableTransitiveProjectReferences` 禁止自动引入宿主的间接项目；宿主项目引用排除 `runtime;native`，日志包引用排除 `runtime`，避免重复打包 Infrastructure、SQLite、SkiaSharp 和日志依赖。当前插件没有需要独立携带的第三方运行时库，干净构建的插件目录应只包含自身 DLL、PDB、deps.json 和 runtimeconfig.json。调整依赖规则后先清理旧构建输出再重新发布，避免目录复制流程携带历史残留文件。
+
 `Parameter` 配置多个新闻 API 地址，用 `-` 分隔，处理器拆成数组后按顺序请求，并在每个地址后追加 `?encoding=json`。当前顺序为 `60s.crystelf.top`、`api.elysiayanyu.top`、`api.cczo.cc/60s`、`60s.zellon.top`、`60s.superjeason.qzz.io`、`60s.okbaike.com`，各地址包含 `/v2/60s` 路径。
 
 每个接口超时为 30 秒；网络错误、超时、响应解析失败、业务状态失败或图片地址为空时记录警告并尝试下一个接口。首次成功后停止切换；全部失败时将最后一次异常交给调度器记录，本次不发送图片。任务取消时立即退出，不尝试后续接口；无目标群时不请求。
