@@ -7,4 +7,16 @@
         <Nullable>disable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\QQAIAgent.Infrastructure\QQAIAgent.Infrastructure.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="..\Config\tokenizer.example.json" TargetPath="Config\tokenizer.example.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\tokenizer.local.json" TargetPath="Config\tokenizer.local.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\Dictionary\userDict.txt" TargetPath="Config\Dictionary\userDict.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\Dictionary\LICENSE.userDict.txt" TargetPath="Config\Dictionary\LICENSE.userDict.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\Dictionary\README.md" TargetPath="Config\Dictionary\README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
 </Project>

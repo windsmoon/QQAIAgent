@@ -1,9 +1,11 @@
 using System.Reflection;
+using QQAIAgent.Cli.Commands;
 
 return args switch
 {
     [] or ["help"] or ["--help"] or ["-h"] => ShowHelp(),
     ["version"] or ["--version"] or ["-v"] => ShowVersion(),
+    ["tokenize", .. var commandArguments] => TokenizeCommand.Execute(commandArguments),
     _ => ShowUsageError(args)
 };
 
@@ -18,11 +20,13 @@ static int ShowHelp()
         命令：
           help       显示帮助（--help、-h）
           version    显示版本（--version、-v）
+          tokenize   测试 Jieba 分词（tokenize --help 查看参数）
 
-        不指定命令时显示帮助。当前尚未接入业务命令。
+        不指定命令时显示帮助。
 
         退出码：
           0    执行成功
+          1    执行失败
           2    命令或参数错误
         """);
     return 0;
