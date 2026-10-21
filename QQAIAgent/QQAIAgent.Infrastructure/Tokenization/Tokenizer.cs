@@ -26,7 +26,7 @@ public sealed class Tokenizer
         var words = mode switch
         {
             "accurate" => _segmenter.Cut(text),
-            "search" => _segmenter.CutForSearch(text),
+            "search" => _segmenter.CutForSearch(text, hmm: true),
             "full" => _segmenter.Cut(text, cutAll: true),
             _ => throw new ArgumentException("分词模式只能是 accurate、search 或 full。", nameof(mode))
         };
