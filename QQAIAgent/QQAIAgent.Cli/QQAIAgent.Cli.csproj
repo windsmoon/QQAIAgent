@@ -12,11 +12,26 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="..\Config\tokenizer.example.json" TargetPath="Config\tokenizer.example.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-        <Content Include="..\Config\tokenizer.local.json" TargetPath="Config\tokenizer.local.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-        <Content Include="..\Config\Dictionary\userDict.txt" TargetPath="Config\Dictionary\userDict.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-        <Content Include="..\Config\Dictionary\LICENSE.userDict.txt" TargetPath="Config\Dictionary\LICENSE.userDict.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-        <Content Include="..\Config\Dictionary\README.md" TargetPath="Config\Dictionary\README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\Dictionary\userDict.txt" TargetPath="Config\Dictionary\userDict.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\Dictionary\LICENSE.userDict.txt" TargetPath="Config\Dictionary\LICENSE.userDict.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\Config\Dictionary\README.md" TargetPath="Config\Dictionary\README.md" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
+
+    <!-- JSON 只在解决方案的 Config 文件夹中引用，构建和发布时直接复制。 -->
+    <Target Name="CopyConfigJson" AfterTargets="Build">
+        <ItemGroup>
+            <ConfigJson Include="..\Config\tokenizer.example.json;..\Config\tokenizer.local.json" />
+        </ItemGroup>
+        <Copy SourceFiles="@(ConfigJson)" DestinationFolder="$(TargetDir)Config" SkipUnchangedFiles="true">
+            <Output TaskParameter="CopiedFiles" ItemName="FileWrites" />
+        </Copy>
+    </Target>
+
+    <Target Name="PublishConfigJson" AfterTargets="Publish">
+        <ItemGroup>
+            <PublishConfigJsonFile Include="..\Config\tokenizer.example.json;..\Config\tokenizer.local.json" />
+        </ItemGroup>
+        <Copy SourceFiles="@(PublishConfigJsonFile)" DestinationFolder="$(PublishDir)Config" SkipUnchangedFiles="true" />
+    </Target>
 
 </Project>
