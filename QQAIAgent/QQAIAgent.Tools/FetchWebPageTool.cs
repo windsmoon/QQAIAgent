@@ -35,7 +35,7 @@ public sealed class FetchWebPageTool : ITool, IDisposable
     }
 
     /// <summary>获取 HTTP/HTTPS 地址的 HTML、纯文本或 JSON 内容，返回包含最终地址、标题和正文的 JSON。</summary>
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
@@ -93,12 +93,12 @@ public sealed class FetchWebPageTool : ITool, IDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return JsonSerializer.Serialize(new
+        return new ToolResult(JsonSerializer.Serialize(new
         {
             url = response.RequestMessage?.RequestUri?.AbsoluteUri ?? uri.AbsoluteUri,
             title,
             content
-        });
+        }));
     }
 
     public void Dispose()

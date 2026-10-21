@@ -116,6 +116,20 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return messageId;
     }
 
+    public async Task<long> SendGroupImageAsync(long groupId, string imageUrl, CancellationToken cancellationToken = default)
+    {
+        // 新闻接口地址固定但图片每天更新，禁止复用同一 URL 的下载缓存。
+        var data = await CallApiAsync("send_group_msg", new
+        {
+            group_id = groupId,
+            message = new[]
+            {
+                new { type = "image", data = new { file = imageUrl, cache = "0" } }
+            }
+        }, cancellationToken);
+        return data.GetProperty("message_id").GetInt64();
+    }
+
     public async Task<GroupMessage> GetGroupMessageAsync(long messageId, CancellationToken cancellationToken)
     {
         var data = await CallApiAsync("get_msg", new { message_id = messageId }, cancellationToken);
@@ -190,6 +204,12 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
     {
         var data = await CallApiAsync("get_group_member_info", new { group_id = groupId, user_id = userId }, cancellationToken);
         return ReadOptionalString(data, "card");
+    }
+
+    public Task<string> GetUserAvatarUrlAsync(long userId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult($"https://q1.qlogo.cn/g?b=qq&nk={userId.ToString(CultureInfo.InvariantCulture)}&s=640");
     }
 
     public async Task WaitForDisconnectAsync(CancellationToken cancellationToken)

@@ -29,7 +29,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
     }
 
     /// <summary>通过阿里云百炼理解视频画面和声音，返回分析内容、模型名称和 Token 用量。</summary>
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
@@ -51,7 +51,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
             var cachedResult = await _videoCache.TryGetAsync(cacheKey, config.CacheDurationSeconds, cancellationToken);
             if (cachedResult is not null)
             {
-                return cachedResult;
+                return new ToolResult(cachedResult);
             }
         }
         
@@ -69,17 +69,17 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         var metadata = await ReadVideoMetadataAsync(url, config.FfprobePath, cancellationToken);
         if (metadata.FileSize > config.MaxVideoSizeMB * 1024L * 1024L)
         {
-            return JsonSerializer.Serialize(new { url, error = $"视频大小超过 {config.MaxVideoSizeMB} MB，请裁剪后重试。" });
+            return new ToolResult(JsonSerializer.Serialize(new { url, error = $"视频大小超过 {config.MaxVideoSizeMB} MB，请裁剪后重试。" }));
         }
 
         if (metadata.DurationSeconds > config.MaxVideoDurationSeconds)
         {
-            return JsonSerializer.Serialize(new { url, error = $"视频时长超过 {config.MaxVideoDurationSeconds} 秒，请裁剪后重试。" });
+            return new ToolResult(JsonSerializer.Serialize(new { url, error = $"视频时长超过 {config.MaxVideoDurationSeconds} 秒，请裁剪后重试。" }));
         }
 
         if (metadata.FileSize <= 0 || metadata.DurationSeconds <= 0 || double.IsFinite(metadata.DurationSeconds) == false)
         {
-            return JsonSerializer.Serialize(new { url, error = "无法确定视频大小或时长，未调用视频理解，请提供可读取元数据的视频文件。" });
+            return new ToolResult(JsonSerializer.Serialize(new { url, error = "无法确定视频大小或时长，未调用视频理解，请提供可读取元数据的视频文件。" }));
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, config.Endpoint)
@@ -129,7 +129,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         {
             await _videoCache.SaveAsync(cacheKey, resultJson, cancellationToken);
         }
-        return resultJson;
+        return new ToolResult(resultJson);
     }
 
     public void Dispose()

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <!-- 只引用显式声明的宿主项目，避免 Agent 的间接项目被当作插件依赖复制。 -->
+        <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" ExcludeAssets="runtime" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 宿主项目及其托管、原生运行时依赖均由宿主提供。 -->
+        <ProjectReference Include="..\QQAIAgent.Schedule\QQAIAgent.Schedule.csproj" Private="false" ExcludeAssets="runtime;native" />
+        <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" Private="false" ExcludeAssets="runtime;native" />
+        <ProjectReference Include="..\QQAIAgent.Agent\QQAIAgent.Agent.csproj" Private="false" ExcludeAssets="runtime;native" />
+    </ItemGroup>
+
+</Project>

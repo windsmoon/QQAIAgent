@@ -24,7 +24,7 @@ public sealed class WebSearchTool : ITool, IDisposable
     }
 
     /// <summary>通过腾讯云 SearchPro 搜索，返回查询词、搜索结果、请求 ID 和服务提示。</summary>
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
@@ -64,13 +64,13 @@ public sealed class WebSearchTool : ITool, IDisposable
             results.Add(JsonSerializer.Deserialize<JsonElement>(page.GetString()!));
         }
 
-        return JsonSerializer.Serialize(new
+        return new ToolResult(JsonSerializer.Serialize(new
         {
             query,
             results,
             requestId = searchResponse.GetProperty("RequestId").GetString(),
             message = searchResponse.TryGetProperty("Msg", out var message) ? message.GetString() : null
-        });
+        }));
     }
 
     public void Dispose()

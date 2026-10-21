@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{A97959
 		Config\agent.local.json = Config\agent.local.json
 		Config\bat.example.json = Config\bat.example.json
 		Config\bat.local.json = Config\bat.local.json
+		Config\python.example.json = Config\python.example.json
+		Config\python.local.json = Config\python.local.json
 		Config\deepseek.example.json = Config\deepseek.example.json
 		Config\deepseek.local.json = Config\deepseek.local.json
 		Config\napcat.example.json = Config\napcat.example.json
@@ -41,6 +43,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Infrastructure", "QQAIAgent.Infrastructure\QQAIAgent.Infrastructure.csproj", "{6D009E37-AF1D-434B-92D4-60552BAA8AC7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Schedule", "QQAIAgent.Schedule\QQAIAgent.Schedule.csproj", "{38A3D3CA-42DD-4EEB-B9E4-3C25B87F6DA0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQAIAgent.Plugins.Schedule", "QQAIAgent.Plugins.Schedule\QQAIAgent.Plugins.Schedule.csproj", "{CB6B2D91-A61E-493B-9E33-2BF46DA2B0E9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -84,5 +88,9 @@ Global
 		{38A3D3CA-42DD-4EEB-B9E4-3C25B87F6DA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{38A3D3CA-42DD-4EEB-B9E4-3C25B87F6DA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{38A3D3CA-42DD-4EEB-B9E4-3C25B87F6DA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CB6B2D91-A61E-493B-9E33-2BF46DA2B0E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CB6B2D91-A61E-493B-9E33-2BF46DA2B0E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CB6B2D91-A61E-493B-9E33-2BF46DA2B0E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CB6B2D91-A61E-493B-9E33-2BF46DA2B0E9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

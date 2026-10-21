@@ -11,7 +11,7 @@ public sealed class SetReasoningEffortTool : ITool
     #endregion
 
     #region methods
-    public Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
@@ -24,7 +24,7 @@ public sealed class SetReasoningEffortTool : ITool
             "max" => ReasoningEffort.Max,
             _ => throw new ArgumentException("effort 必须为 minimal、low、medium、high 或 max。", nameof(argumentsJson))
         };
-        return Task.FromResult($"下一次模型请求将使用 {context.ReasoningEffort} 思考强度。");
+        return Task.FromResult(new ToolResult($"下一次模型请求将使用 {context.ReasoningEffort} 思考强度。"));
     }
     #endregion
 }

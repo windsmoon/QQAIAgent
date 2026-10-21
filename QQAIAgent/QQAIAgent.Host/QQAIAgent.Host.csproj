@@ -20,11 +20,13 @@
       <ProjectReference Include="..\QQAIAgent.Schedule\QQAIAgent.Schedule.csproj" />
       <ProjectReference Include="..\QQAIAgent.DeepSeek\QQAIAgent.DeepSeek.csproj" />
       <ProjectReference Include="..\QQAIAgent.Tools\QQAIAgent.Tools.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="ToolPluginAssembly" />
+      <ProjectReference Include="..\QQAIAgent.Plugins.Schedule\QQAIAgent.Plugins.Schedule.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="ToolPluginAssembly" />
     </ItemGroup>
 
     <ItemGroup>
       <Content Include="..\Config\*.md" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\..\Third\FFmpeg\**\*" TargetPath="Third\FFmpeg\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="..\..\Third\Python\**\*" TargetPath="Third\Python\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
 
     <!-- JSON 只在解决方案的 Config 文件夹中引用，构建和发布时直接复制。 -->

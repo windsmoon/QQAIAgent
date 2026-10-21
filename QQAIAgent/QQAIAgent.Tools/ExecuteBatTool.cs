@@ -18,7 +18,7 @@ public sealed class ExecuteBatTool : ITool, IDisposable
     #endregion
 
     #region methods
-    public async Task<string> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         using var arguments = JsonDocument.Parse(argumentsJson);
         var script = arguments.RootElement.GetProperty("script").GetString();
@@ -76,7 +76,7 @@ public sealed class ExecuteBatTool : ITool, IDisposable
                     await Task.WhenAll(outputTask, errorTask, process.WaitForExitAsync(cancellationToken));
                     var output = await outputTask;
                     var error = await errorTask;
-                    return JsonSerializer.Serialize(new
+                    return new ToolResult(JsonSerializer.Serialize(new
                     {
                         exitCode = process.ExitCode,
                         stdout = output.Text,
@@ -84,7 +84,7 @@ public sealed class ExecuteBatTool : ITool, IDisposable
                         stdoutTruncated = output.Truncated,
                         stderrTruncated = error.Truncated,
                         durationMs = (long)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds
-                    });
+                    }));
                 }
                 finally
                 {

@@ -13,7 +13,7 @@ public sealed class SendGroupMessageHandler(IMessageSender messageSender, AgentC
     #region methods
     public async Task ExecuteAsync(ScheduleTask task, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(task.Text))
+        if (string.IsNullOrWhiteSpace(task.Parameter))
         {
             return;
         }
@@ -40,7 +40,7 @@ public sealed class SendGroupMessageHandler(IMessageSender messageSender, AgentC
             hasAttemptedSend = true;
             try
             {
-                var messageId = await messageSender.SendGroupMessageAsync(groupId, 0, task.Text,
+                var messageId = await messageSender.SendGroupMessageAsync(groupId, 0, task.Parameter,
                     quoteMessageId: null, atUser: false, cancellationToken: cancellationToken);
                 logger.LogInformation("定时消息发送成功：任务={TaskId}，群={GroupId}，消息ID={MessageId}", task.Id, groupId, messageId);
             }

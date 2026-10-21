@@ -264,7 +264,13 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
         using var httpResponse = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        httpResponse.EnsureSuccessStatusCode();
+        if (httpResponse.IsSuccessStatusCode == false)
+        {
+            // 保留 DS 的完整错误正文，由上层现有异常日志输出具体拒绝原因。
+            var errorBody = await httpResponse.Content.ReadAsStringAsync(timeout.Token);
+            throw new HttpRequestException($"DeepSeek 模型请求失败：HTTP={(int)httpResponse.StatusCode} ({httpResponse.ReasonPhrase})，响应={errorBody}",
+                null, httpResponse.StatusCode);
+        }
         await using var responseStream = await httpResponse.Content.ReadAsStreamAsync(timeout.Token);
         using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
         return ParseResponse(document.RootElement);
@@ -273,26 +279,9 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
     /// <summary>下载并上传图片，最长边超限时先等比缩小，文件自创建起保留 30 天，下载和上传共用单次超时。</summary>
     private async Task<string> UploadImageAsync(string imageUrl, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
-        var imageUri = new Uri(imageUrl);
-        if (imageUri.Host == "multimedia.nt.qq.com.cn")
-        {
-            var queryParts = imageUri.Query.TrimStart('?').Split('&').ToList();
-            // 仅处理图片的两种业务类型，不能把视频等其他 appid 当作群聊图片。
-            var keyType = queryParts.Contains("appid=1406") ? "private"
-                : queryParts.Contains("appid=1407") ? "group" : string.Empty;
-            var rkeyIndex = queryParts.FindIndex(part => part.StartsWith("rkey=", StringComparison.Ordinal));
-            if (keyType != string.Empty && rkeyIndex >= 0)
-            {
-                var rkey = await _rkeyCache.GetAsync(keyType, timeout.Token);
-                // 下载前替换有效凭据，保留 fileid 等原始参数；上传缓存仍使用消息来源键。
-                queryParts[rkeyIndex] = "rkey=" + Uri.EscapeDataString(rkey);
-                imageUrl = new UriBuilder(imageUri) { Query = string.Join("&", queryParts) }.Uri.AbsoluteUri;
-            }
-        }
+        imageUrl = await _rkeyCache.GetImageDownloadUrlAsync(imageUrl, timeout.Token);
         // API 密钥只加在上传请求上，读取图片来源时不携带。
         using var imageResponse = await _httpClient.GetAsync(imageUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         if (imageResponse.IsSuccessStatusCode == false)
