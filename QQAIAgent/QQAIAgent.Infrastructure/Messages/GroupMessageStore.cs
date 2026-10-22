@@ -1,17 +1,20 @@
 using System.Globalization;
 using System.Text.Json;
+using Dapper;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Infrastructure.Image;
+using QQAIAgent.Infrastructure.Tokenization;
 using QQAIAgent.Messaging;
 
 namespace QQAIAgent.Infrastructure.Messages;
 
 /// <summary>只记录初始化时允许的群，每个群使用独立的 SQLite 文件。</summary>
-public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore)
+public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore, Tokenizer tokenizer)
 {
     #region fields
     private readonly Dictionary<long, IDatabase> _databases = [];
+    private readonly Dictionary<long, GroupMessageFtsStore> _ftsStores = [];
     #endregion
 
     #region methods
@@ -20,9 +23,10 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
         Directory.CreateDirectory(directoryPath);
         foreach (var groupId in allowedGroups)
         {
+            var databasePath = Path.Combine(directoryPath, $"{groupId.ToString(CultureInfo.InvariantCulture)}.sqlite3");
             var connectionString = new SqliteConnectionStringBuilder
             {
-                DataSource = Path.Combine(directoryPath, $"{groupId.ToString(CultureInfo.InvariantCulture)}.sqlite3")
+                DataSource = databasePath
             }.ToString();
             var database = new SqliteDatabase(connectionString);
             await database.ExecuteAsync("""
@@ -48,23 +52,31 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
 
                 COMMIT;
                 """, cancellationToken: cancellationToken);
+            var ftsStore = new GroupMessageFtsStore(databasePath, tokenizer);
+            await ftsStore.InitializeAsync(cancellationToken);
             _databases[groupId] = database;
+            _ftsStores[groupId] = ftsStore;
         }
     }
 
-    /// <summary>保存发送信息和完整原始正文，不依赖业务处理时修改的消息段。</summary>
-    public Task RecordAsync(GroupMessage message, CancellationToken cancellationToken)
+    /// <summary>在同一事务内保存原消息和分词索引，不依赖业务处理时修改的消息段。</summary>
+    public async Task RecordAsync(GroupMessage message, CancellationToken cancellationToken)
     {
         if (_databases.TryGetValue(message.GroupId, out var database) == false)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return database.ExecuteAsync("""
+        await using var connection = database.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var recordId = await connection.ExecuteScalarAsync<long>(new CommandDefinition("""
             INSERT INTO messages (message_id, message_time, sender_id, sender_nickname,
                 sender_card, sub_type, content_json, ref_message_id)
             VALUES (@MessageId, @MessageTime, @SenderId, @SenderNickname,
-                @SenderCard, @SubType, @ContentJson, @RefMessageId);
+                @SenderCard, @SubType, @ContentJson, @RefMessageId)
+            RETURNING id;
             """, new
         {
             message.MessageId,
@@ -75,7 +87,10 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
             message.SubType,
             message.ContentJson,
             message.RefMessageId
-        }, cancellationToken);
+        }, transaction, cancellationToken: cancellationToken));
+
+        await _ftsStores[message.GroupId].RecordAsync(recordId, connection, transaction, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>按群号和消息 ID 读取并还原消息，未找到时返回 null。</summary>

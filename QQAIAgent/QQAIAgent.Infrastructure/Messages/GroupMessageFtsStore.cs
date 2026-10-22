@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Globalization;
 using System.Text;
 using Dapper;
@@ -24,6 +25,12 @@ public sealed class GroupMessageFtsStore
             ELSE ''
         END
         """;
+    private const string CreateTableSql = """
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+            tokens,
+            tokenize='unicode61'
+        );
+        """;
     private readonly IDatabase _database;
     private readonly Tokenizer _tokenizer;
     #endregion
@@ -49,13 +56,25 @@ public sealed class GroupMessageFtsStore
         await using var connection = _database.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await connection.ExecuteAsync(new CommandDefinition("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-                tokens,
-                tokenize='unicode61'
-            );
-            """, transaction: transaction, cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(CreateTableSql,
+            transaction: transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>读取刚保存的原消息、分词并写入 FTS；沿用消息入库的连接和事务，由调用方统一提交。</summary>
+    internal async Task RecordAsync(long recordId, DbConnection connection, DbTransaction transaction, CancellationToken cancellationToken)
+    {
+        var text = await connection.ExecuteScalarAsync<string>(new CommandDefinition($"""
+            SELECT {MessageTextSql}
+            FROM messages
+            WHERE messages.id = @RecordId;
+            """, new { RecordId = recordId }, transaction, cancellationToken: cancellationToken));
+        var tokens = string.Join(" ", _tokenizer.Tokenize(text, "search"));
+
+        // 使用本地记录主键关联索引，QQ 消息 ID 可能重复或为空。
+        await connection.ExecuteAsync(new CommandDefinition("""
+            INSERT INTO messages_fts(rowid, tokens) VALUES (@RecordId, @Tokens);
+            """, new { RecordId = recordId, Tokens = tokens }, transaction, cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -98,8 +117,9 @@ public sealed class GroupMessageFtsStore
                 cancellationToken.ThrowIfCancellationRequested();
                 // 索引固定使用搜索模式，FTS 行与原消息通过 id 一一对应。
                 var tokens = string.Join(" ", _tokenizer.Tokenize(message.Text, "search"));
+                // 重建期间新消息可能已实时写入 FTS，覆盖同一行以避免主键冲突。
                 await connection.ExecuteAsync(new CommandDefinition("""
-                    INSERT INTO messages_fts(rowid, tokens) VALUES (@Id, @Tokens);
+                    INSERT OR REPLACE INTO messages_fts(rowid, tokens) VALUES (@Id, @Tokens);
                     """, new { Id = message.RecordId, Tokens = tokens }, transaction, cancellationToken: cancellationToken));
             }
 

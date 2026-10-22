@@ -29,8 +29,14 @@ var messages = await store.SearchAsync("角色 配队", limit: 20, cancellationT
 
 `messages` 按只新增的方式使用，不设置删除或更新触发器。`BuildAsync` 每次先清空 FTS，再按消息 id 从头分批读取，直到没有下一批消息；不判断是否已有索引，也不支持增量补建。
 
-每批在同一个写事务中读取、分词并写入，保证整批提交或回滚；事务期间会占用数据库写锁。
+每批在同一个写事务中读取、分词并写入，保证整批提交或回滚；事务期间会占用数据库写锁。若新消息已实时写入索引，重建时覆盖对应的 FTS 行，避免主键冲突。
 
 取消或失败会回滚当前批次，已提交批次保留，但再次调用仍会先清空并从头重建，不续接上次进度。重建期间搜索结果不完整。修改词典后再次调用 `BuildAsync` 即可重新分词，不能只调用 FTS 自身的 rebuild 命令。
 
-当前只提供 Infrastructure 数据库接口，尚未接入 CLI 的索引命令或 Host 的实时分词写入；原有群消息搜索接口也未切换到 FTS。
+## 新消息实时索引
+
+Host 启动时读取 `Config/tokenizer.local.json`，按 `UserDictionaryPaths` 加载用户词典，并在所有群之间复用同一个 `Tokenizer`。默认用户词典及其许可证随 Host 构建和发布复制到 `Config/Dictionary`；官方词典存档不加载。自定义词典路径所指向的文件也需部署到服务器。
+
+`GroupMessageStore.InitializeAsync` 为每个允许记录的群创建 `GroupMessageFtsStore`，由它初始化 FTS 表，不清空已有索引，也不自动处理历史消息。`GroupMessageStore.RecordAsync` 保存原消息后，调用 `GroupMessageFtsStore.RecordAsync`，由后者提取原始文本、使用 `search` 模式分词并写入 FTS。两个步骤共用同一个连接和事务，由消息存储统一提交；任一步失败均不提交。无文本消息也保存空词元行。
+
+历史消息仍需调用 `BuildAsync` 全量重建。当前尚未接入 CLI 的索引命令，原有群消息搜索接口也未切换到 FTS。
