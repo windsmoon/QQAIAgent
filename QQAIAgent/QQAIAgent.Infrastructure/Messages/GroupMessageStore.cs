@@ -67,6 +67,17 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
             return;
         }
 
+        // 使用原始正文，避免消息段已被业务处理修改；提取规则与历史索引保持一致。
+        using var document = JsonDocument.Parse(message.ContentJson);
+        var text = document.RootElement.ValueKind switch
+        {
+            JsonValueKind.String => document.RootElement.GetString() ?? "",
+            JsonValueKind.Array => string.Concat(document.RootElement.EnumerateArray()
+                .Where(segment => segment.GetProperty("type").GetString() == "text")
+                .Select(segment => segment.GetProperty("data").GetProperty("text").GetString())),
+            _ => ""
+        };
+
         await using var connection = database.CreateConnection();
         await connection.OpenAsync(cancellationToken);
 
@@ -89,7 +100,7 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
             message.RefMessageId
         }, transaction, cancellationToken: cancellationToken));
 
-        await _ftsStores[message.GroupId].RecordAsync(recordId, connection, transaction, cancellationToken);
+        await _ftsStores[message.GroupId].RecordAsync(recordId, text, connection, transaction, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

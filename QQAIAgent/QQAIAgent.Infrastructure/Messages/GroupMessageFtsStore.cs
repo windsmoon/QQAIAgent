@@ -61,14 +61,9 @@ public sealed class GroupMessageFtsStore
         await transaction.CommitAsync(cancellationToken);
     }
 
-    /// <summary>读取刚保存的原消息、分词并写入 FTS；沿用消息入库的连接和事务，由调用方统一提交。</summary>
-    internal async Task RecordAsync(long recordId, DbConnection connection, DbTransaction transaction, CancellationToken cancellationToken)
+    /// <summary>对传入的原始文本分词并写入 FTS；沿用消息入库的连接和事务，由调用方统一提交。</summary>
+    internal async Task RecordAsync(long recordId, string text, DbConnection connection, DbTransaction transaction, CancellationToken cancellationToken)
     {
-        var text = await connection.ExecuteScalarAsync<string>(new CommandDefinition($"""
-            SELECT {MessageTextSql}
-            FROM messages
-            WHERE messages.id = @RecordId;
-            """, new { RecordId = recordId }, transaction, cancellationToken: cancellationToken));
         var tokens = string.Join(" ", _tokenizer.Tokenize(text, "search"));
 
         // 使用本地记录主键关联索引，QQ 消息 ID 可能重复或为空。

@@ -37,6 +37,6 @@ var messages = await store.SearchAsync("角色 配队", limit: 20, cancellationT
 
 Host 启动时读取 `Config/tokenizer.local.json`，按 `UserDictionaryPaths` 加载用户词典，并在所有群之间复用同一个 `Tokenizer`。默认用户词典及其许可证随 Host 构建和发布复制到 `Config/Dictionary`；官方词典存档不加载。自定义词典路径所指向的文件也需部署到服务器。
 
-`GroupMessageStore.InitializeAsync` 为每个允许记录的群创建 `GroupMessageFtsStore`，由它初始化 FTS 表，不清空已有索引，也不自动处理历史消息。`GroupMessageStore.RecordAsync` 保存原消息后，调用 `GroupMessageFtsStore.RecordAsync`，由后者提取原始文本、使用 `search` 模式分词并写入 FTS。两个步骤共用同一个连接和事务，由消息存储统一提交；任一步失败均不提交。无文本消息也保存空词元行。
+`GroupMessageStore.InitializeAsync` 为每个允许记录的群创建 `GroupMessageFtsStore`，由它初始化 FTS 表，不清空已有索引，也不自动处理历史消息。`GroupMessageStore.RecordAsync` 从原始 `ContentJson` 提取文本，保存原消息后，将记录 ID 和文本传给 `GroupMessageFtsStore.RecordAsync`，由后者使用 `search` 模式分词并写入 FTS，不再查询原消息。两个步骤共用同一个连接和事务，由消息存储统一提交；任一步失败均不提交。无文本消息也保存空词元行。
 
 历史消息仍需调用 `BuildAsync` 全量重建。当前尚未接入 CLI 的索引命令，原有群消息搜索接口也未切换到 FTS。
