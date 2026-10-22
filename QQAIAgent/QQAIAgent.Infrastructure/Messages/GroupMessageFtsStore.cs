@@ -43,7 +43,7 @@ public sealed class GroupMessageFtsStore
     #endregion
 
     #region methods
-    /// <summary>建立 FTS 表及旧索引清理触发器，不修改原消息结构，也不自动对历史消息分词。</summary>
+    /// <summary>建立 FTS 表，不修改原消息结构，也不自动对历史消息分词。</summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = _database.CreateConnection();
@@ -54,61 +54,38 @@ public sealed class GroupMessageFtsStore
                 tokens,
                 tokenize='unicode61'
             );
-
-            CREATE TRIGGER IF NOT EXISTS messages_fts_after_delete
-            AFTER DELETE ON messages BEGIN
-                DELETE FROM messages_fts WHERE rowid = old.id;
-            END;
-
-            CREATE TRIGGER IF NOT EXISTS messages_fts_after_update
-            AFTER UPDATE OF id, content_json ON messages
-            WHEN old.id != new.id OR old.content_json IS NOT new.content_json
-            BEGIN
-                DELETE FROM messages_fts WHERE rowid = old.id;
-            END;
             """, transaction: transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>
-    /// 分批处理已有消息，默认只补建缺失索引；返回本次处理的消息条数。
-    /// rebuild 会先清空 FTS 再重新分词，用于词典变更；中断后可用普通补建继续，重建期间搜索结果不完整。
-    /// 只处理开始时最大 id 以内的消息；已提交批次的后续正文修改会清除对应索引，留待下一次补建。
+    /// 每次先清空 FTS，再从头分批读取全部消息、重新分词并建立索引；返回本次处理的消息条数。
+    /// 重建期间搜索结果不完整，中断后再次调用也会从头重建。
     /// </summary>
-    public async Task<long> BuildAsync(bool rebuild = false, int batchSize = 500, CancellationToken cancellationToken = default)
+    public async Task<long> BuildAsync(int batchSize = 500, CancellationToken cancellationToken = default)
     {
-        if (batchSize < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(batchSize), "每批消息数量必须大于 0。");
-        }
+        batchSize = Math.Max(1, batchSize);
 
         await InitializeAsync(cancellationToken);
         await using var connection = _database.CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        if (rebuild)
-        {
-            await connection.ExecuteAsync(new CommandDefinition("DELETE FROM messages_fts;", cancellationToken: cancellationToken));
-        }
+        await connection.ExecuteAsync(new CommandDefinition("DELETE FROM messages_fts;", cancellationToken: cancellationToken));
 
-        var maxId = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
-            "SELECT MAX(id) FROM messages;", cancellationToken: cancellationToken));
         long? lastId = null;
         long processedCount = 0;
-        while (maxId.HasValue)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // 同一批的读取、分词和写入处于同一写事务，避免分词期间正文被其他连接改写或删除。
+            // 同一批的读取、分词和写入处于同一事务，失败或取消时整批回滚。
             // 事务只覆盖一批；分词器已由调用方初始化，多群数据库可顺序复用同一个实例。
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
             var messages = (await connection.QueryAsync<GroupMessageSearchItem>(new CommandDefinition($"""
                 SELECT messages.id AS RecordId, {MessageTextSql} AS Text
                 FROM messages
                 WHERE (@LastId IS NULL OR messages.id > @LastId)
-                    AND messages.id <= @MaxId
-                    AND NOT EXISTS (SELECT 1 FROM messages_fts WHERE rowid = messages.id)
                 ORDER BY messages.id
                 LIMIT @BatchSize;
-                """, new { LastId = lastId, MaxId = maxId, BatchSize = batchSize },
+                """, new { LastId = lastId, BatchSize = batchSize },
                 transaction, cancellationToken: cancellationToken))).AsList();
             if (messages.Count == 0)
             {
@@ -119,10 +96,10 @@ public sealed class GroupMessageFtsStore
             foreach (var message in messages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                // 索引固定使用搜索模式；空正文也保存一行空词元，表示已处理，避免每次重复扫描。
+                // 索引固定使用搜索模式，FTS 行与原消息通过 id 一一对应。
                 var tokens = string.Join(" ", _tokenizer.Tokenize(message.Text, "search"));
                 await connection.ExecuteAsync(new CommandDefinition("""
-                    INSERT OR REPLACE INTO messages_fts(rowid, tokens) VALUES (@Id, @Tokens);
+                    INSERT INTO messages_fts(rowid, tokens) VALUES (@Id, @Tokens);
                     """, new { Id = message.RecordId, Tokens = tokens }, transaction, cancellationToken: cancellationToken));
             }
 
@@ -135,8 +112,7 @@ public sealed class GroupMessageFtsStore
     }
 
     /// <summary>将查询分词后按 AND 匹配，按相关性及消息 id 倒序返回原消息文本；不接受用户输入的 FTS 运算符。</summary>
-    public async Task<List<GroupMessageSearchItem>> SearchAsync(string text, int limit = 20, int offset = 0,
-        CancellationToken cancellationToken = default)
+    public async Task<List<GroupMessageSearchItem>> SearchAsync(string text, int limit = 20, int offset = 0, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (limit < 1 || offset < 0)
@@ -146,7 +122,7 @@ public sealed class GroupMessageFtsStore
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            return [];
+            return null;
         }
 
         // unicode61 默认索引字母、数字和私用字符；纯标点不能作为必须命中的查询词。
@@ -157,11 +133,11 @@ public sealed class GroupMessageFtsStore
             .ToList();
         if (words.Count == 0)
         {
-            return [];
+            return null;
         }
 
         // SQL 参数化之外，还需按 FTS 字符串语法转义双引号，防止输入被解释为列名或运算符。
-        var query = string.Join(" AND ", words.Select(word => "\"" + word.Replace("\"", "\"\"") + "\""));
+        var query = string.Join(" OR ", words.Select(word => "\"" + word.Replace("\"", "\"\"") + "\""));
         return await _database.QueryAsync<GroupMessageSearchItem>($"""
             SELECT messages.id AS RecordId, messages.message_id AS MessageId,
                 messages.message_time AS MessageTime, messages.sender_id AS SenderId,
