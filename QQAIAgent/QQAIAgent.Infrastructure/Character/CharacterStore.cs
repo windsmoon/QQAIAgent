@@ -21,6 +21,20 @@ public sealed class CharacterStore(string directoryPath, string defaultCharacter
         return File.ReadAllTextAsync(path, cancellationToken);
     }
 
+    public async Task<(string GroupContent, string GlobalContent)> GetAsync(long userId, long groupId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var groupPath = GetPath(userId, groupId);
+        var globalPath = GetPath(userId, null);
+        var groupContent = File.Exists(groupPath)
+            ? await File.ReadAllTextAsync(groupPath, cancellationToken)
+            : null;
+        var globalContent = File.Exists(globalPath)
+            ? await File.ReadAllTextAsync(globalPath, cancellationToken)
+            : null;
+        return (groupContent, globalContent);
+    }
+
     public Task SaveAsync(long userId, long? groupId, string content, CancellationToken cancellationToken)
     {
         var path = GetPath(userId, groupId);

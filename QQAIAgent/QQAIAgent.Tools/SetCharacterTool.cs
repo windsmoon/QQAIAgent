@@ -17,6 +17,13 @@ public sealed class SetCharacterTool(ICharacterStore characterStore) : ITool
         cancellationToken.ThrowIfCancellationRequested();
         using var arguments = JsonDocument.Parse(argumentsJson);
         var root = arguments.RootElement;
+        var operation = root.GetProperty("operation").GetString();
+        if (operation == "get")
+        {
+            var character = await characterStore.GetAsync(context.SenderId, context.GroupId, cancellationToken);
+            return new ToolResult($"已保存的人设：\n当前群内人设：\n{character.GroupContent ?? "未设置"}\n\n全局人设：\n{character.GlobalContent ?? "未设置"}");
+        }
+
         long? groupId = root.GetProperty("scope").GetString() switch
         {
             "global" => null,
@@ -24,7 +31,7 @@ public sealed class SetCharacterTool(ICharacterStore characterStore) : ITool
             _ => throw new ArgumentException("scope 必须为 global 或 group。", nameof(argumentsJson))
         };
         var scopeName = groupId.HasValue ? "当前群内" : "全局";
-        switch (root.GetProperty("operation").GetString())
+        switch (operation)
         {
             case "set":
                 var content = root.GetProperty("content").GetString();
@@ -45,7 +52,7 @@ public sealed class SetCharacterTool(ICharacterStore characterStore) : ITool
                 characterStore.Delete(context.SenderId, groupId);
                 return new ToolResult($"已删除你的{scopeName}人设，将在下次对话创建时按群内、全局、默认的优先级加载。");
             default:
-                throw new ArgumentException("operation 必须为 set 或 delete。", nameof(argumentsJson));
+                throw new ArgumentException("operation 必须为 set、delete 或 get。", nameof(argumentsJson));
         }
     }
     #endregion

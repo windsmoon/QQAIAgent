@@ -2,8 +2,8 @@
   {
     "Name": "set_character",
     "TimeoutSeconds": 5,
-    "Description": "设置或删除当前请求用户的人设，QQ 号和当前群号由程序取得。operation=set 设置（覆盖）人设，content 必填且不得超过 300 字符；operation=delete 删除指定范围的人设，无需 content。scope=global 对该用户在所有群生效，scope=group 只对该用户在当前群生效。每次创建对话按群内人设、全局人设、默认人设的顺序只加载第一份存在的人设；设置或删除从下次对话创建时生效。全局设置不会覆盖已有群内人设，删除群内人设后回退到全局或默认人设。",
-    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"operation\":{\"type\":\"string\",\"enum\":[\"set\",\"delete\"]},\"scope\":{\"type\":\"string\",\"enum\":[\"global\",\"group\"]},\"content\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":300,\"description\":\"operation=set 时必填的人设内容，不得超过 300 字符；delete 时省略\"}},\"required\":[\"operation\",\"scope\"],\"additionalProperties\":false}",
+    "Description": "设置、删除或查询当前请求用户的人设，QQ 号和当前群号由程序取得。operation=set 设置（覆盖）人设，scope 和 content 必填，content 不得超过 300 字符；operation=delete 删除指定范围的人设，scope 必填，无需 content；operation=get 同时返回该用户在当前群内和全局的两份人设，分别标明未设置的范围，不读取或返回默认人设，无需 scope 和 content，不修改人设。查询结果是已保存的配置，不代表当前会话已加载的人设。scope=global 对该用户在所有群生效，scope=group 只对该用户在当前群生效。每次创建对话按群内人设、全局人设、默认人设的顺序只加载第一份存在的人设；设置或删除从下次对话创建时生效。全局设置不会覆盖已有群内人设，删除群内人设后回退到全局或默认人设。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"operation\":{\"type\":\"string\",\"enum\":[\"set\",\"delete\",\"get\"]},\"scope\":{\"type\":\"string\",\"enum\":[\"global\",\"group\"],\"description\":\"operation=set/delete 时必填；get 时省略，同时查询当前群内和全局人设，不返回默认人设。\"},\"content\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":300,\"description\":\"operation=set 时必填的人设内容，不得超过 300 字符；delete/get 时省略\"}},\"required\":[\"operation\"],\"additionalProperties\":false}",
     "Enabled": true
   },
   {
