@@ -13,7 +13,7 @@ var store = new GroupMessageFtsStore(databasePath, tokenizer);
 // 每次清空 FTS 后从头建立全部消息的索引，默认每批 500 条；内部自动初始化 FTS 表。
 var count = await store.BuildAsync(cancellationToken: cancellationToken);
 
-var messages = await store.SearchAsync("角色 配队", limit: 20, cancellationToken: cancellationToken);
+var messages = await store.SearchAsync(["角色", "配队"], ftsOperator: "and", limit: 20, cancellationToken: cancellationToken);
 ```
 
 `InitializeAsync` 可以单独调用，只建立 FTS 表。`BuildAsync` 返回本次处理的消息数；需要统计处理耗时时，由调用方在词典初始化、预热完成后开始计时。
@@ -23,7 +23,7 @@ var messages = await store.SearchAsync("角色 配队", limit: 20, cancellationT
 - 建索引和搜索均固定使用 Jieba `search` 模式，开启 HMM；CLI 原有分词测试仍可选择模式。
 - 沿用现有数据库搜索的正文提取规则：JSON 字符串直接使用，消息段数组按顺序拼接 `text` 段，不展开图片、卡片和合并转发。
 - 正文中的 URL 正常参与分词。无文本的消息保存空词元行，与原消息保持一一对应。
-- 查询词以 AND 组合，忽略纯标点词元，转义 FTS 双引号；按相关性排序，分数相同时按消息 id 倒序。返回完整原文和发送者等信息，不提供原文短语匹配或高亮。
+- 查询接收关键词列表和必填的 `ftsOperator`（`and` 或 `or`）。关键词按搜索模式分词、去重并忽略纯标点词元；`and` 要求所有词元命中，`or` 命中任一词元即可。关键词中的双引号按 FTS 字面文本转义，不能注入查询运算符。按相关性排序，分数相同时按消息 id 倒序。返回完整原文和发送者等信息，不提供原文短语匹配或高亮。
 
 ## 全量重建
 

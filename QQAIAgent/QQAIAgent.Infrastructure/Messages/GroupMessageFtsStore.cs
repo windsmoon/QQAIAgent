@@ -126,8 +126,8 @@ public sealed class GroupMessageFtsStore
         return processedCount;
     }
 
-    /// <summary>将查询分词后按 AND 匹配，按相关性及消息 id 倒序返回原消息文本；不接受用户输入的 FTS 运算符。</summary>
-    public async Task<List<GroupMessageSearchItem>> SearchAsync(string text, int limit = 20, int offset = 0, CancellationToken cancellationToken = default)
+    /// <summary>将关键词分词后按指定的 and/or 组合词元，按相关性及消息 id 倒序返回原消息文本；关键词作为字面文本处理。</summary>
+    public async Task<List<GroupMessageSearchItem>> SearchAsync(List<string> keywords, string ftsOperator, int limit = 20, int offset = 0, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (limit < 1 || offset < 0)
@@ -135,13 +135,22 @@ public sealed class GroupMessageFtsStore
             throw new ArgumentException("limit 必须大于 0，offset 必须大于等于 0。");
         }
 
-        if (string.IsNullOrWhiteSpace(text))
+        var separator = ftsOperator switch
+        {
+            "and" => " AND ",
+            "or" => " OR ",
+            _ => throw new ArgumentException("ftsOperator 只能是 and 或 or。", nameof(ftsOperator))
+        };
+
+        if (keywords.Count == 0)
         {
             return null;
         }
 
         // unicode61 默认索引字母、数字和私用字符；纯标点不能作为必须命中的查询词。
-        var words = _tokenizer.Tokenize(text, "search")
+        var words = keywords
+            .Where(keyword => string.IsNullOrWhiteSpace(keyword) == false)
+            .SelectMany(keyword => _tokenizer.Tokenize(keyword, "search"))
             .Where(word => word.EnumerateRunes().Any(rune => Rune.IsLetter(rune) || Rune.IsNumber(rune)
                 || Rune.GetUnicodeCategory(rune) == UnicodeCategory.PrivateUse))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -152,7 +161,7 @@ public sealed class GroupMessageFtsStore
         }
 
         // SQL 参数化之外，还需按 FTS 字符串语法转义双引号，防止输入被解释为列名或运算符。
-        var query = string.Join(" OR ", words.Select(word => "\"" + word.Replace("\"", "\"\"") + "\""));
+        var query = string.Join(separator, words.Select(word => "\"" + word.Replace("\"", "\"\"") + "\""));
         return await _database.QueryAsync<GroupMessageSearchItem>($"""
             SELECT messages.id AS RecordId, messages.message_id AS MessageId,
                 messages.message_time AS MessageTime, messages.sender_id AS SenderId,
