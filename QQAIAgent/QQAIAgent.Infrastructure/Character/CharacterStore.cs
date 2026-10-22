@@ -2,7 +2,7 @@ using QQAIAgent.Abstractions.Character;
 
 namespace QQAIAgent.Infrastructure.Character;
 
-public sealed class CharacterStore(string directoryPath) : ICharacterStore
+public sealed class CharacterStore(string directoryPath, string defaultCharacterPath) : ICharacterStore
 {
     #region methods
     public Task<string> LoadAsync(long userId, long groupId, CancellationToken cancellationToken)
@@ -15,7 +15,7 @@ public sealed class CharacterStore(string directoryPath) : ICharacterStore
 
         if (File.Exists(path) == false)
         {
-            path = Path.Combine(directoryPath, "Default.txt");
+            path = defaultCharacterPath;
         }
 
         return File.ReadAllTextAsync(path, cancellationToken);

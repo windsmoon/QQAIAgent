@@ -38,7 +38,6 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
-builder.Services.AddSingleton<ICharacterStore>(new CharacterStore(Path.Combine(AppContext.BaseDirectory, "Data", "Character")));
 builder.Services.AddSingleton(new ImageFileStore(Path.Combine(AppContext.BaseDirectory, "Data")));
 builder.Services.AddSingleton(services => new TextToImageStore(Path.Combine(AppContext.BaseDirectory, "Data"),
     services.GetRequiredService<NapCatConfig>().BotAccount));
@@ -52,6 +51,9 @@ builder.Services.AddSingleton<IGroupMessageQuery>(services => services.GetRequir
 builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
 var configDirectory = Path.Combine(AppContext.BaseDirectory, "Config");
+builder.Services.AddSingleton<ICharacterStore>(new CharacterStore(
+    Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "Character"),
+    Path.Combine(configDirectory, "Default.txt")));
 var napCatConfigPath = Path.Combine(configDirectory, "napcat.local.json");
 var napCatConfigJson = File.ReadAllText(napCatConfigPath);
 var napCatConfig = JsonSerializer.Deserialize<NapCatConfig>(napCatConfigJson)
