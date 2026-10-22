@@ -25,6 +25,7 @@
 
     <ItemGroup>
       <Content Include="..\Config\*.md" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="..\Data\Character\Default.txt" TargetPath="Data\Character\Default.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\..\Third\FFmpeg\**\*" TargetPath="Third\FFmpeg\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\..\Third\Python\**\*" TargetPath="Third\Python\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>

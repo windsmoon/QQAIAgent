@@ -1,5 +1,12 @@
 [
   {
+    "Name": "set_character",
+    "TimeoutSeconds": 5,
+    "Description": "设置或删除当前请求用户的人设，QQ 号和当前群号由程序取得。operation=set 设置（覆盖）人设，content 必填且不得超过 300 字符；operation=delete 删除指定范围的人设，无需 content。scope=global 对该用户在所有群生效，scope=group 只对该用户在当前群生效。每次创建对话按群内人设、全局人设、默认人设的顺序只加载第一份存在的人设；设置或删除从下次对话创建时生效。全局设置不会覆盖已有群内人设，删除群内人设后回退到全局或默认人设。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"operation\":{\"type\":\"string\",\"enum\":[\"set\",\"delete\"]},\"scope\":{\"type\":\"string\",\"enum\":[\"global\",\"group\"]},\"content\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":300,\"description\":\"operation=set 时必填的人设内容，不得超过 300 字符；delete 时省略\"}},\"required\":[\"operation\",\"scope\"],\"additionalProperties\":false}",
+    "Enabled": true
+  },
+  {
     "Name": "set_reasoning_effort",
     "TimeoutSeconds": 5,
     "Description": "设置下一次模型请求的思考强度。每条新用户消息的初始强度由 Agent 配置决定；需要更强推理时调用，能回答时直接回答。不调用则保留当前强度，也可按后续任务需要降低强度。可与普通工具同时调用，同轮多次设置以最后一次有效设置为准。档位由低到高为 minimal、low、medium、high、max，实际参数由模型类库映射。",

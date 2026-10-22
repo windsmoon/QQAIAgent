@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
+using QQAIAgent.Abstractions.Character;
 using QQAIAgent.Abstractions.Messages;
 using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Abstractions.Video;
@@ -13,6 +14,7 @@ using QQAIAgent.Host;
 using QQAIAgent.Host.Logging;
 using QQAIAgent.Host.Plugin;
 using QQAIAgent.Host.Schedule;
+using QQAIAgent.Infrastructure.Character;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Messages;
@@ -36,6 +38,7 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
+builder.Services.AddSingleton<ICharacterStore>(new CharacterStore(Path.Combine(AppContext.BaseDirectory, "Data", "Character")));
 builder.Services.AddSingleton(new ImageFileStore(Path.Combine(AppContext.BaseDirectory, "Data")));
 builder.Services.AddSingleton(services => new TextToImageStore(Path.Combine(AppContext.BaseDirectory, "Data"),
     services.GetRequiredService<NapCatConfig>().BotAccount));
@@ -97,7 +100,7 @@ builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAgent(
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(), services.GetRequiredService<IMessageReader>(),
     services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>(),
-    services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<GroupMessageStore>(),
+    services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<GroupMessageStore>(), services.GetRequiredService<ICharacterStore>(),
     services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
 builder.Services.AddHostedService<Worker>();
 

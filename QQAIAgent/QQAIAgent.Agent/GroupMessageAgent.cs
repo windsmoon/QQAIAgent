@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using QQAIAgent.Abstractions.Character;
 using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
@@ -13,7 +14,7 @@ using QQAIAgent.Messaging.Content;
 
 namespace QQAIAgent.Agent;
 
-public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
+public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, ICharacterStore characterStore, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
 {
     #region fields
     private readonly List<ChatToolDefinition> _enabledToolDefinitions = toolDefinitions.Where(tool => tool.Enabled).ToList();
@@ -83,6 +84,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         var toolContext = new ToolContext
         {
             GroupId = message.GroupId,
+            SenderId = message.SenderId,
             ReasoningEffort = config.FirstReasoningEffort
         };
         // 消息接收端已筛选出需要处理的消息，并移除了触发标记。
@@ -102,6 +104,14 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         {
             messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = config.SystemPrompt }] });
         }
+
+        // 每次创建对话只加载第一份匹配的人设，作为 user 消息保留，不改变系统提示词。
+        var character = await characterStore.LoadAsync(message.SenderId, message.GroupId, cancellationToken);
+        messages.Add(new ChatMessage
+        {
+            Role = ChatRole.User,
+            ContentList = [new ChatTextContent { Text = $"本次对话请使用以下人设：\n{character}" }]
+        });
 
         var historyContextIndex = messages.Count;
         var refMessageIdResults = new HashSet<long>();
@@ -536,7 +546,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             });
             await AppendChatContentsAsync(contentList, refMessage.MessageContentList,
                 refMessage.GroupId != 0 ? refMessage.GroupId : groupMessage.GroupId, isReference: true, cancellationToken);
-            // 每层都插到系统消息之后，让更早的引用排在前面；引用正文不处理触发前缀。
+            // 每层都插到系统消息和人设之后，让更早的引用排在前面；引用正文不处理触发前缀。
             messageList.Insert(referenceContextIndex, new ChatMessage
             {
                 Role = ChatRole.User,
