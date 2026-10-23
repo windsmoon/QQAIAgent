@@ -466,7 +466,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     }
 
     // 展开列表中的合并转发：节点拼回为标签文本加原消息段，图片等内容保持原类型继续走常规转换。
-    private async Task TryExpandForwardsAsync(List<MessageContent> contents, int depth, CancellationToken cancellationToken, bool useCache = true)
+    private async Task TryExpandForwardsAsync(List<MessageContent> contents, int depth, CancellationToken cancellationToken, bool chatHistoryEnabled = true)
     {
         if (depth > config.MaxForwardDepth)
         {
@@ -486,7 +486,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 // 内层转发的节点已随外层响应内联返回，直接使用；外层转发才需要调接口获取。
                 IReadOnlyList<GroupMessage> nodes = forward.InnerMessages.Count > 0
                     ? forward.InnerMessages
-                    : await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken, useCache);
+                    : await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken, chatHistoryEnabled);
                 var limitedMessageList = nodes.Take(config.MaxForwardMessagesPerLayer).ToList();
                 expanded.Add(new TextContent
                 {
@@ -506,7 +506,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 expanded.Add(new TextContent { Text = "[合并转发消息，获取失败]" });
             }
 
-            await TryExpandForwardsAsync(expanded, depth + 1, cancellationToken, useCache);
+            await TryExpandForwardsAsync(expanded, depth + 1, cancellationToken, chatHistoryEnabled);
             // 删除这个 forward 数据，改用展开后的数据
             contents.RemoveAt(i);
             contents.InsertRange(i, expanded);

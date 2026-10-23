@@ -143,16 +143,16 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return message;
     }
 
-    public async Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken, bool useCache = true)
+    public async Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken, bool chatHistoryEnabled = true)
     {
-        // 合集内容不可变；允许缓存时先查本地，关闭聊天记录时只请求接口。
-        var dataJson = useCache ? await forwardMessageStore.TryGetAsync(resId, cancellationToken) : null;
+        // 合集内容不可变；允许聊天记录数据库搜索时先查本地，否则只请求接口，也不写入数据库。
+        var dataJson = chatHistoryEnabled ? await forwardMessageStore.TryGetAsync(resId, cancellationToken) : null;
         if (dataJson is null)
         {
             // 兼容 message_id 与 id 两种参数名，一并传入。
             var data = await CallApiAsync("get_forward_msg", new { message_id = resId, id = resId }, cancellationToken);
             dataJson = data.GetRawText();
-            if (useCache)
+            if (chatHistoryEnabled)
             {
                 Task.Run(() => forwardMessageStore.SaveAsync(resId, dataJson, cancellationToken));
             }
