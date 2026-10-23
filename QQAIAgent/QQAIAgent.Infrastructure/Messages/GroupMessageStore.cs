@@ -4,13 +4,14 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Infrastructure.Image;
+using QQAIAgent.Infrastructure.Runtime;
 using QQAIAgent.Infrastructure.Tokenization;
 using QQAIAgent.Messaging;
 
 namespace QQAIAgent.Infrastructure.Messages;
 
 /// <summary>只记录初始化时允许的群，每个群使用独立的 SQLite 文件。</summary>
-public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore, Tokenizer tokenizer)
+public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore, Tokenizer tokenizer, RuntimeDataStore runtimeDataStore)
 {
     #region fields
     private readonly Dictionary<long, IDatabase> _databases = [];
@@ -62,7 +63,8 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
     /// <summary>在同一事务内保存原消息和分词索引，不依赖业务处理时修改的消息段。</summary>
     public async Task RecordAsync(GroupMessage message, CancellationToken cancellationToken)
     {
-        if (_databases.TryGetValue(message.GroupId, out var database) == false)
+        if (runtimeDataStore.Get(message.GroupId).ChatHistoryEnabled == false ||
+            _databases.TryGetValue(message.GroupId, out var database) == false)
         {
             return;
         }
@@ -133,6 +135,11 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
     /// <summary>读取并还原截至当前消息发送时刻的最近群消息，排除当前消息；数量限制在引用和正文类型过滤之前应用。</summary>
     public async Task<List<GroupMessage>> GetRecentMessagesAsync(long groupId, long? currentMessageId, long? currentMessageTime, int count, CancellationToken cancellationToken)
     {
+        if (runtimeDataStore.Get(groupId).ChatHistoryEnabled == false)
+        {
+            return [];
+        }
+
         var database = _databases[groupId];
         var messageList = await database.QueryAsync<GroupMessage>("""
             SELECT @GroupId AS GroupId, message_id AS MessageId, message_time AS MessageTime,

@@ -4,12 +4,19 @@ using QQAIAgent.Abstractions.Tool;
 using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Statistics;
+using QQAIAgent.Infrastructure.Runtime;
 
 namespace QQAIAgent.Agent;
 
-public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, ChatToolDefinition> toolDefinitions, RequestStatistics statistics, ILogger<ToolExecutor> logger)
+public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IReadOnlyDictionary<string, ChatToolDefinition> toolDefinitions, RequestStatistics statistics, RuntimeDataStore runtimeDataStore, ILogger<ToolExecutor> logger)
 {
     #region methods
+    public bool IsAllowed(string toolName, long groupId)
+    {
+        return runtimeDataStore.Get(groupId).ChatHistoryEnabled ||
+            toolName is not ("search_group_messages" or "check_context_relevance");
+    }
+
     /// <summary>按顺序执行工具调用；Agent 的前置调用不受主模型启用状态限制，调用失败以结果文本返回，请求取消继续抛出。</summary>
     public async Task<IReadOnlyList<ChatMessage>> ExecuteAsync(IReadOnlyList<ChatToolCall> toolCalls, ToolContext context, string requestId, string modelCallId, CancellationToken cancellationToken, bool isPreprocessing = false)
     {
@@ -24,7 +31,11 @@ public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IRead
             using var toolScope = logger.BeginScope("工具={ToolName}，调用ID={ToolCallId}", toolCall.Name, toolCall.Id);
 
             ToolResult result;
-            if (toolDefinitions.TryGetValue(toolCall.Name, out var toolDefinition) == false ||
+            if (IsAllowed(toolCall.Name, context.GroupId) == false)
+            {
+                result = new ToolResult("当前群已关闭聊天记录权限，不能使用此工具。");
+            }
+            else if (toolDefinitions.TryGetValue(toolCall.Name, out var toolDefinition) == false ||
                 (isPreprocessing == false && toolDefinition.Enabled == false))
             {
                 result = new ToolResult($"工具未启用或未配置：{toolCall.Name}");

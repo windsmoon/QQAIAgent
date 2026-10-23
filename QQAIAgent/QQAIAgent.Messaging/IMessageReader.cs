@@ -5,8 +5,8 @@ public interface IMessageReader
     #region methods
     /// <summary>按消息 ID 获取群消息，保留正文消息段和引用关系。</summary>
     Task<GroupMessage> GetGroupMessageAsync(long messageId, CancellationToken cancellationToken);
-    /// <summary>按资源 ID 获取合并转发内的消息列表。</summary>
-    Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken);
+    /// <summary>按资源 ID 获取合并转发内的消息列表，useCache 为 false 时不读写本地缓存。</summary>
+    Task<IReadOnlyList<GroupMessage>> GetForwardMessagesAsync(string resId, CancellationToken cancellationToken, bool useCache = true);
     /// <summary>根据群号和群文件资源 ID 获取下载地址。</summary>
     Task<string> GetGroupFileUrlAsync(long groupId, string fileId, CancellationToken cancellationToken);
     /// <summary>获取当前图片下载凭据；ExpiresAt 为创建时间加有效期得到的 Unix 秒时间戳。</summary>

@@ -7,6 +7,7 @@ using QQAIAgent.Agent.Chat;
 using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Infrastructure.Messages;
+using QQAIAgent.Infrastructure.Runtime;
 using QQAIAgent.Messaging;
 using QQAIAgent.NapCat.Config;
 using QQAIAgent.Schedule;
@@ -15,7 +16,7 @@ namespace QQAIAgent.Host.Schedule;
 
 public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore, IChatModel chatModel,
     IMessageSender messageSender, AgentConfig agentConfig, NapCatConfig napCatConfig, ScheduleConfig scheduleConfig,
-    ILogger<SummarizeGroupMessagesHandler> logger) : IScheduleHandler
+    RuntimeDataStore runtimeDataStore, ILogger<SummarizeGroupMessagesHandler> logger) : IScheduleHandler
 {
     #region fields
     // 发给模型的纯文本 JSON 保留中文，避免转义为 Unicode 序列增加输入长度。
@@ -58,7 +59,7 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
         foreach (var groupId in groupIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (task.ExcludedGroupIds.Contains(groupId))
+            if (task.ExcludedGroupIds.Contains(groupId) || runtimeDataStore.Get(groupId).ChatHistoryEnabled == false)
             {
                 continue;
             }

@@ -66,6 +66,27 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 
 超时字段和模型调用次数填写正数。达到最后一次模型调用且模型仍要求工具时，不执行该轮工具，回复“已达到模型调用次数上限，请重新发起请求”。
 
+### 群运行时数据
+
+每个群使用独立文件 `Data/RuntimeData/{群号}.json`，路径相对于程序目录。首次访问时加载，内存中以群号为键缓存 `RuntimeData`，每个群复用一个实例。文件或字段未配置时，`ChatHistoryEnabled` 默认是 `true`。例如 `Data/RuntimeData/123456789.json`：
+
+```json
+{
+  "ChatHistoryEnabled": false
+}
+```
+
+关闭后不再记录该群消息和分词索引，不读取历史上下文，禁用 `search_group_messages`、`check_context_relevance`，并跳过定时聊天总结。已有记录保留。消息引用链不受开关限制，仍优先读取本地记录，未命中时通过 NapCat 获取；正文和引用中的合并转发仍正常展开，但不读写合并转发缓存。
+
+运行时通过 `RuntimeDataStore.Get(groupId)` 修改对应实例，开关立即用于后续操作；调用 `Save(groupId)` 只写回该群的 JSON 文件：
+
+```csharp
+runtimeDataStore.Get(groupId).ChatHistoryEnabled = false;
+runtimeDataStore.Save(groupId);
+```
+
+文件只在首次访问该群时读取；外部手工修改已加载的文件后需重启生效。
+
 ### NapCat 与模型配置
 
 `napcat.local.json` 的 `WebSocketUrl` 填写正向 WebSocket 地址，`BotAccount` 填写实际登录账号；启动时会通过 `get_login_info` 核验，账号不一致会导致启动失败。

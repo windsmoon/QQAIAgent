@@ -37,6 +37,11 @@ public sealed partial class GroupMessageStore : IGroupMessageQuery
     public async Task<GroupMessageSearchResult> SearchAsync(long groupId, GroupMessageFilter filter, int limit, int offset,
         bool oldestFirst, CancellationToken cancellationToken)
     {
+        if (runtimeDataStore.Get(groupId).ChatHistoryEnabled == false)
+        {
+            return new GroupMessageSearchResult();
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(filter);
         filter.Validate();
@@ -78,6 +83,11 @@ public sealed partial class GroupMessageStore : IGroupMessageQuery
 
     public Task<long> CountAsync(long groupId, GroupMessageFilter filter, CancellationToken cancellationToken)
     {
+        if (runtimeDataStore.Get(groupId).ChatHistoryEnabled == false)
+        {
+            return Task.FromResult(0L);
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(filter);
         filter.Validate();
@@ -90,6 +100,11 @@ public sealed partial class GroupMessageStore : IGroupMessageQuery
     public Task<List<GroupMessageSearchItem>> GetMessagesInTimeRangeAsync(long groupId, long startTime, long endTime,
         int limit, int offset, CancellationToken cancellationToken)
     {
+        if (runtimeDataStore.Get(groupId).ChatHistoryEnabled == false)
+        {
+            return Task.FromResult(new List<GroupMessageSearchItem>());
+        }
+
         var database = GetQueryDatabase(groupId);
         var filter = new GroupMessageFilter { StartTime = startTime, EndTime = endTime };
         // 搜索工具的正文预览会截断到 2000 字，总结需要读取完整正文。

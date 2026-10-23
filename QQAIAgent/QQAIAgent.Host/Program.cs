@@ -18,6 +18,7 @@ using QQAIAgent.Infrastructure.Character;
 using QQAIAgent.Infrastructure.Database;
 using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Messages;
+using QQAIAgent.Infrastructure.Runtime;
 using QQAIAgent.Infrastructure.Tokenization;
 using QQAIAgent.Infrastructure.Video;
 using QQAIAgent.Messaging;
@@ -39,6 +40,7 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
+builder.Services.AddSingleton(new RuntimeDataStore(Path.Combine(AppContext.BaseDirectory, "Data", "RuntimeData")));
 builder.Services.AddSingleton(new ImageFileStore(Path.Combine(AppContext.BaseDirectory, "Data")));
 builder.Services.AddSingleton(services => new TextToImageStore(Path.Combine(AppContext.BaseDirectory, "Data"),
     services.GetRequiredService<NapCatConfig>().BotAccount));
@@ -47,7 +49,7 @@ builder.Services.AddSingleton<IVideoCache>(services => services.GetRequiredServi
 
 var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
 builder.Services.AddSingleton(services => new GroupMessageStore(messagesDirectoryPath,
-    services.GetRequiredService<TextToImageStore>(), services.GetRequiredService<Tokenizer>()));
+    services.GetRequiredService<TextToImageStore>(), services.GetRequiredService<Tokenizer>(), services.GetRequiredService<RuntimeDataStore>()));
 builder.Services.AddSingleton<IGroupMessageQuery>(services => services.GetRequiredService<GroupMessageStore>());
 builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
@@ -110,7 +112,7 @@ builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAge
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(), services.GetRequiredService<IMessageReader>(),
     services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>(),
     services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<GroupMessageStore>(), services.GetRequiredService<ICharacterStore>(),
-    services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
+    services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<RuntimeDataStore>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
