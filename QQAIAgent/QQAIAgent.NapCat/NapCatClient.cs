@@ -209,6 +209,12 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         return ReadOptionalString(data, "card");
     }
 
+    public async Task<string> GetGroupMemberRoleAsync(long groupId, long userId, CancellationToken cancellationToken)
+    {
+        var data = await CallApiAsync("get_group_member_info", new { group_id = groupId, user_id = userId, no_cache = true }, cancellationToken);
+        return ReadOptionalString(data, "role");
+    }
+
     public Task<string> GetUserAvatarUrlAsync(long userId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

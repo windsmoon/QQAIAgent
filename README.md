@@ -87,6 +87,8 @@ runtimeDataStore.Save(groupId);
 
 文件只在首次访问该群时读取；外部手工修改已加载的文件后需重启生效。
 
+群主也可按正常消息触发方式发送“关闭本群聊天记录”或“重新开启聊天记录”，模型调用 `set_runtime_data`，传入属性名 `property_name` 和 JSON 值 `value`。工具通过反射查找 `RuntimeData` 的公开可写实例属性，按属性类型解析值，赋值后保存当前群文件，不限定为聊天记录开关。工具实时核验发送者身份，仅群主可以设置，群管理员和普通成员均不能设置；身份查询失败时不修改。聊天记录关闭时该设置工具仍可使用，重新开启不会补录关闭期间的消息。
+
 ### NapCat 与模型配置
 
 `napcat.local.json` 的 `WebSocketUrl` 填写正向 WebSocket 地址，`BotAccount` 填写实际登录账号；启动时会通过 `get_login_info` 核验，账号不一致会导致启动失败。
@@ -111,6 +113,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | 工具 | 参数 | example 启用状态 | example 超时 | 功能 |
 | --- | --- | --- | --- | --- |
 | `get_time` | `{}` | 开启 | 5 秒 | 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移 |
+| `set_runtime_data` | `{"property_name":"ChatHistoryEnabled","value":false}` | 开启 | 10 秒 | 仅群主可按属性名修改当前群 RuntimeData，并保存该群运行时数据 |
 | `set_reasoning_effort` | `{"effort":"high"}` | 开启 | 5 秒 | 调整本条请求下一轮模型调用的思考强度 |
 | `search_group_messages` | `{"keyword":"上线","limit":20}` | 开启 | 30 秒 | 通过固定只读接口查询当前群已记录的消息，支持组合筛选、分页和计数 |
 | `web_search` | `{"query":"搜索关键词"}` | 关闭 | 30 秒 | 通过腾讯云 SearchPro 搜索，返回查询词、结果、请求 ID 和服务提示 |
