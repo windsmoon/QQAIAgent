@@ -104,7 +104,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         // 系统提示词放在最前面，并随工具调用消息保留到本次请求结束。
         if (string.IsNullOrWhiteSpace(config.SystemPrompt) == false)
         {
-            messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = config.SystemPrompt }] });
+            messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}\n\n当前时间：{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}" }] });
         }
 
         // 每次创建对话只加载第一份匹配的人设，作为 user 消息保留，不改变系统提示词。
