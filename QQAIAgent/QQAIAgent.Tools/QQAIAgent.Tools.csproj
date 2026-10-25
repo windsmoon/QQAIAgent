@@ -14,7 +14,8 @@
     <ItemGroup>
         <ProjectReference Include="..\QQAIAgent.Abstractions\QQAIAgent.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
         <ProjectReference Include="..\QQAIAgent.Messaging\QQAIAgent.Messaging.csproj" Private="false" ExcludeAssets="runtime" />
-        <ProjectReference Include="..\QQAIAgent.Infrastructure\QQAIAgent.Infrastructure.csproj" Private="false" ExcludeAssets="runtime" />
+        <!-- Infrastructure 及其原生依赖由宿主提供，插件不重复携带。 -->
+        <ProjectReference Include="..\QQAIAgent.Infrastructure\QQAIAgent.Infrastructure.csproj" Private="false" ExcludeAssets="runtime;native" />
     </ItemGroup>
 
 </Project>
