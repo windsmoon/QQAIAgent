@@ -34,6 +34,47 @@ public sealed partial class GroupMessageStore : IGroupMessageQuery
     #endregion
 
     #region methods
+    public async Task<List<GroupMessageSearchItem>> SearchKnowledgeAsync(long groupId, List<string> keywords, string ftsOperator, string query, int limit, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (runtimeDataStore.Get(groupId).ChatHistoryEnabled == false)
+        {
+            return [];
+        }
+
+        GetQueryDatabase(groupId);
+        // 每路多取一些候选，避免合并去重后丢失有价值的结果。
+        var candidateLimit = limit * 3;
+        var rankings = new List<List<GroupMessageSearchItem>>();
+        if (keywords.Count > 0)
+        {
+            rankings.Add(await _ftsStores[groupId].SearchAsync(keywords, ftsOperator, candidateLimit,
+                cancellationToken: cancellationToken) ?? []);
+        }
+        if (string.IsNullOrWhiteSpace(query) == false)
+        {
+            var matches = await _vectorStores[groupId].SearchAsync(query, embeddingGenerator, candidateLimit, cancellationToken);
+            rankings.Add(matches.Select(match => match.Message).ToList());
+        }
+
+        // RRF 只合并排名，避免直接相加量纲不同的 FTS 分数和向量距离；排名从 1 开始。
+        var results = new Dictionary<long, (GroupMessageSearchItem Message, double Score)>();
+        foreach (var ranking in rankings)
+        {
+            for (var index = 0; index < ranking.Count; index++)
+            {
+                var messageSearchItem = ranking[index];
+                results.TryGetValue(messageSearchItem.RecordId, out var existing);
+                results[messageSearchItem.RecordId] = (messageSearchItem, existing.Score + 1.0 / (60 + index + 1));
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return results.Values.OrderByDescending(result => result.Score)
+            .ThenByDescending(result => result.Message.RecordId)
+            .Take(limit).Select(result => result.Message).ToList();
+    }
+
     public async Task<GroupMessageSearchResult> SearchAsync(long groupId, GroupMessageFilter filter, int limit, int offset,
         bool oldestFirst, CancellationToken cancellationToken)
     {

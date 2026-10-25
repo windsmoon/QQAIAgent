@@ -14,7 +14,7 @@ public sealed class ToolExecutor(IReadOnlyDictionary<string, ITool> tools, IRead
     public bool IsAllowed(string toolName, long groupId)
     {
         return runtimeDataStore.Get(groupId).ChatHistoryEnabled ||
-            toolName is not ("search_group_messages" or "check_context_relevance");
+            toolName is not ("search_group_messages" or "search_knowledge_base" or "check_context_relevance");
     }
 
     /// <summary>按顺序执行工具调用；Agent 的前置调用不受主模型启用状态限制，调用失败以结果文本返回，请求取消继续抛出。</summary>
