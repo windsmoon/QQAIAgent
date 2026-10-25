@@ -11,8 +11,10 @@
         <PackageReference Include="Dapper" Version="2.1.66" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+        <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
         <PackageReference Include="SkiaSharp" Version="4.153.1" />
         <PackageReference Include="Acme.Jieba.NET" Version="1.0.0" />
+        <PackageReference Include="Tokenizers.HuggingFace" Version="3.23.1" />
     </ItemGroup>
 
     <ItemGroup>

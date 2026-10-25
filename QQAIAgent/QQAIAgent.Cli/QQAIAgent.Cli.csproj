@@ -15,6 +15,8 @@
         <Content Include="..\Config\Dictionary\userDict.txt" TargetPath="Config\Dictionary\userDict.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
         <Content Include="..\Config\Dictionary\LICENSE.userDict.txt" TargetPath="Config\Dictionary\LICENSE.userDict.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
         <Content Include="..\Config\Dictionary\README.md" TargetPath="Config\Dictionary\README.md" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\..\Third\Sqlite\vec0.dll" TargetPath="Third\Sqlite\vec0.dll" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="..\..\Third\multilingual-e5-small\**\*" TargetPath="Third\multilingual-e5-small\%(RecursiveDir)%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
 
     <!-- JSON 只在解决方案的 Config 文件夹中引用，构建和发布时直接复制。 -->
