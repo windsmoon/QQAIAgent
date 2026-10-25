@@ -20,7 +20,7 @@
 
 ## 分词测试
 
-CLI 引用 `QQAIAgent.Infrastructure`，调用其中的 `JiebaTokenizer`。Infrastructure 负责词典初始化、多用户词典加载和分词；CLI 负责参数解析、配置读取、计时和输出，不访问数据库。
+CLI 引用 `QQAIAgent.Infrastructure`，调用其中的 `Tokenizer`。Infrastructure 负责词典初始化、多用户词典加载和分词；CLI 负责参数解析、配置读取、计时和输出，`tokenize` 命令不访问数据库。
 
 ```powershell
 # 查看参数
@@ -62,7 +62,26 @@ CLI 引用 `QQAIAgent.Infrastructure`，调用其中的 `JiebaTokenizer`。Infra
 
 原始文本直接交给 Jieba 分词，包括其中的 URL。结果忽略空白词元，保留其他词元的顺序、重复项和标点；所有模式沿用库的默认 HMM 设置，输出数量为词元数量。
 
-当前默认用户词典包含约 188 万条额外词条，每次启动 CLI 都会重新加载。初始化在 `JiebaTokenizer` 构造时完成，正式服务可复用同一个实例。CLI 在初始化后用相同文本和模式完整预热一次，再计时处理。显示的“分词处理耗时”包含分词及结果整理，不包含配置读取、词典加载、初始化、预热、结果格式化和控制台输出。
+当前默认用户词典包含约 188 万条额外词条，每次启动 CLI 都会重新加载。初始化在 `Tokenizer` 构造时完成，正式服务可复用同一个实例。CLI 在初始化后用相同文本和模式完整预热一次，再计时处理。显示的“分词处理耗时”包含分词及结果整理，不包含配置读取、词典加载、初始化、预热、结果格式化和控制台输出。
+
+## FTS 重建与搜索
+
+```powershell
+# 重建单个群的全部历史消息索引
+.\QQAIAgent.Cli.exe fts build --group 1129405252 --directory "D:\DevFile\QQAIAgent\Data\Messages"
+
+# 重建该目录中所有群的索引，一次加载词典，逐群处理
+.\QQAIAgent.Cli.exe fts build --group all --directory "D:\DevFile\QQAIAgent\Data\Messages"
+
+# 必须指定一个群；按相关性输出排名和原消息
+.\QQAIAgent.Cli.exe fts search --group 1129405252 --text "角色 配队" --operator and --limit 20 --directory "D:\DevFile\QQAIAgent\Data\Messages"
+```
+
+`--directory` 默认程序目录下的 `Data/Messages`，显式传入的相对路径以当前工作目录为基准。群数据库文件名为 `<群号>.sqlite3`；`all` 只扫描指定目录中以正整数群号命名的文件，不递归、不创建新数据库。这里的“所有群”指该目录已有的全部群数据库，不读取 Host 的允许群列表。两种命令均支持 `--config`，规则与 `tokenize` 相同。
+
+`build` 每次清空 FTS 并全量重建，输出各群处理条数和毫秒耗时，多群时额外输出总数及耗时之和。处理耗时包含清空索引、读取历史消息、分词和事务写入，不包含词典加载、预热、建表、连接初始化及控制台输出。重建失败或中断后可能只有部分索引，重新运行会从头开始。
+
+`search` 固定使用搜索模式分词，`--operator` 默认为 `or`，也可指定 `and`；`--limit` 默认为 20。输出的 `#1`、`#2` 等表示返回顺序，按相关性排序，分数相同时按记录 ID 倒序；同时显示原消息、发送者和 Unix 秒时间戳。查询耗时包含查询分词、数据库查询和结果读取，不含词典加载、预热和控制台输出。搜索不会自动建立或重建索引，首次使用前先运行 `fts build`。
 
 ## 添加业务命令
 

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Dapper;
@@ -73,16 +74,18 @@ public sealed class GroupMessageFtsStore
     }
 
     /// <summary>
-    /// 每次先清空 FTS，再从头分批读取全部消息、重新分词并建立索引；返回本次处理的消息条数。
+    /// 每次先清空 FTS，再从头分批读取全部消息、重新分词并建立索引；返回处理条数和不含初始化的处理耗时。
     /// 重建期间搜索结果不完整，中断后再次调用也会从头重建。
     /// </summary>
-    public async Task<long> BuildAsync(int batchSize = 500, CancellationToken cancellationToken = default)
+    public async Task<(long Count, TimeSpan Elapsed)> BuildAsync(int batchSize = 500, CancellationToken cancellationToken = default)
     {
         batchSize = Math.Max(1, batchSize);
 
         await InitializeAsync(cancellationToken);
         await using var connection = _database.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        // 调用方先加载并预热分词器；这里只统计清空索引及逐批读写、分词的时间。
+        var stopwatch = Stopwatch.StartNew();
         await connection.ExecuteAsync(new CommandDefinition("DELETE FROM messages_fts;", cancellationToken: cancellationToken));
 
         long? lastId = null;
@@ -123,7 +126,8 @@ public sealed class GroupMessageFtsStore
             processedCount += messages.Count;
         }
 
-        return processedCount;
+        stopwatch.Stop();
+        return (processedCount, stopwatch.Elapsed);
     }
 
     /// <summary>将关键词分词后按指定的 and/or 组合词元，按相关性及消息 id 倒序返回原消息文本；关键词作为字面文本处理。</summary>

@@ -11,12 +11,12 @@ var tokenizer = new Tokenizer(config, configDirectory);
 var store = new GroupMessageFtsStore(databasePath, tokenizer);
 
 // 每次清空 FTS 后从头建立全部消息的索引，默认每批 500 条；内部自动初始化 FTS 表。
-var count = await store.BuildAsync(cancellationToken: cancellationToken);
+var (count, elapsed) = await store.BuildAsync(cancellationToken: cancellationToken);
 
 var messages = await store.SearchAsync(["角色", "配队"], ftsOperator: "and", limit: 20, cancellationToken: cancellationToken);
 ```
 
-`InitializeAsync` 可以单独调用，只建立 FTS 表。`BuildAsync` 返回本次处理的消息数；需要统计处理耗时时，由调用方在词典初始化、预热完成后开始计时。
+`InitializeAsync` 可以单独调用，只建立 FTS 表。`BuildAsync` 返回本次处理的消息数和处理耗时，内部在建表及连接初始化完成后开始计时；调用方应先完成词典加载和预热。
 
 ## 索引规则
 
@@ -39,4 +39,4 @@ Host 启动时读取 `Config/tokenizer.local.json`，按 `UserDictionaryPaths` �
 
 `GroupMessageStore.InitializeAsync` 为每个允许记录的群创建 `GroupMessageFtsStore`，由它初始化 FTS 表，不清空已有索引，也不自动处理历史消息。`GroupMessageStore.RecordAsync` 从原始 `ContentJson` 提取文本，保存原消息后，将记录 ID 和文本传给 `GroupMessageFtsStore.RecordAsync`，由后者使用 `search` 模式分词并写入 FTS，不再查询原消息。两个步骤共用同一个连接和事务，由消息存储统一提交；任一步失败均不提交。无文本消息也保存空词元行。
 
-历史消息仍需调用 `BuildAsync` 全量重建。当前尚未接入 CLI 的索引命令，原有群消息搜索接口也未切换到 FTS。
+历史消息通过 CLI `fts build --group <群号|all>` 全量重建，`fts search --group <群号> --text "查询文本"` 可直接测试全文搜索；两者均支持 `--directory` 指定群数据库目录。原有群消息搜索接口仍未切换到 FTS。
