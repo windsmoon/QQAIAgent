@@ -61,7 +61,6 @@ internal static class EmbeddingCommand
             stopwatch.Stop();
 
             Console.WriteLine($"向量维度：{vector.Length}");
-            Console.WriteLine($"向量模长：{Math.Sqrt(vector.Sum(value => (double)value * value)):F6}");
             Console.WriteLine($"预热后处理耗时：{stopwatch.Elapsed.TotalMilliseconds:F2} ms");
             return 0;
         }
