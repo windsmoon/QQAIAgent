@@ -8,6 +8,7 @@ return args switch
     ["tokenize", .. var commandArguments] => TokenizeCommand.Execute(commandArguments),
     ["fts", .. var commandArguments] => await FtsCommand.ExecuteAsync(commandArguments),
     ["embedding", .. var commandArguments] => EmbeddingCommand.Execute(commandArguments),
+    ["vector", .. var commandArguments] => await VectorCommand.ExecuteAsync(commandArguments),
     _ => ShowUsageError(args)
 };
 
@@ -25,6 +26,7 @@ static int ShowHelp()
           tokenize   测试 Jieba 分词（tokenize --help 查看参数）
           fts        重建或搜索群消息全文索引（fts --help 查看参数）
           embedding  测试单句向量生成（embedding --help 查看参数）
+          vector     全量重建群消息向量（vector --help 查看参数）
 
         不指定命令时显示帮助。
 
