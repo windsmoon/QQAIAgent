@@ -16,6 +16,7 @@ using QQAIAgent.Host.Plugin;
 using QQAIAgent.Host.Schedule;
 using QQAIAgent.Infrastructure.Character;
 using QQAIAgent.Infrastructure.Database;
+using QQAIAgent.Infrastructure.Embedding;
 using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Messages;
 using QQAIAgent.Infrastructure.Runtime;
@@ -49,7 +50,8 @@ builder.Services.AddSingleton<IVideoCache>(services => services.GetRequiredServi
 
 var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
 builder.Services.AddSingleton(services => new GroupMessageStore(messagesDirectoryPath,
-    services.GetRequiredService<TextToImageStore>(), services.GetRequiredService<Tokenizer>(), services.GetRequiredService<RuntimeDataStore>()));
+    services.GetRequiredService<TextToImageStore>(), services.GetRequiredService<Tokenizer>(), services.GetRequiredService<RuntimeDataStore>(),
+    services.GetRequiredService<EmbeddingGenerator>()));
 builder.Services.AddSingleton<IGroupMessageQuery>(services => services.GetRequiredService<GroupMessageStore>());
 builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
@@ -59,6 +61,8 @@ var tokenizerConfig = JsonSerializer.Deserialize<TokenizerConfig>(File.ReadAllTe
     ?? throw new InvalidDataException($"分词配置不能为 null：{tokenizerConfigPath}");
 // 服务启动时加载词典，所有群的新消息共用同一个分词器。
 builder.Services.AddSingleton(new Tokenizer(tokenizerConfig, configDirectory));
+// 所有群共用一个模型实例，启动初始化群数据库时加载，由容器负责释放。
+builder.Services.AddSingleton(_ => new EmbeddingGenerator(Path.Combine(AppContext.BaseDirectory, "Third", "multilingual-e5-small")));
 
 builder.Services.AddSingleton<ICharacterStore>(new CharacterStore(
     Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "Character"),

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -47,6 +48,16 @@ public sealed class GroupMessageVectorStore
                 embedding FLOAT[384] distance_metric=cosine
             );
             """, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>沿用原消息入库的连接和事务写入已生成的向量，由调用方统一提交。</summary>
+    internal Task RecordAsync(long recordId, float[] vector, DbConnection connection, DbTransaction transaction, CancellationToken cancellationToken)
+    {
+        var bytes = new byte[vector.Length * sizeof(float)];
+        Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
+        return connection.ExecuteAsync(new CommandDefinition("""
+            INSERT INTO messages_vec(record_id, embedding) VALUES (@RecordId, @Embedding);
+            """, new { RecordId = recordId, Embedding = bytes }, transaction, cancellationToken: cancellationToken));
     }
 
     /// <summary>停服维护时清空并全量生成向量；跳过空文本，中断后再次调用从头重建。调用方负责复用和释放模型。</summary>

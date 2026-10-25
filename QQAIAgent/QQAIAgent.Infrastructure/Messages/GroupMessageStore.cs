@@ -3,6 +3,7 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using QQAIAgent.Infrastructure.Database;
+using QQAIAgent.Infrastructure.Embedding;
 using QQAIAgent.Infrastructure.Image;
 using QQAIAgent.Infrastructure.Runtime;
 using QQAIAgent.Infrastructure.Tokenization;
@@ -11,11 +12,12 @@ using QQAIAgent.Messaging;
 namespace QQAIAgent.Infrastructure.Messages;
 
 /// <summary>只记录初始化时允许的群，每个群使用独立的 SQLite 文件。</summary>
-public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore, Tokenizer tokenizer, RuntimeDataStore runtimeDataStore)
+public sealed partial class GroupMessageStore(string directoryPath, TextToImageStore textToImageStore, Tokenizer tokenizer, RuntimeDataStore runtimeDataStore, EmbeddingGenerator embeddingGenerator)
 {
     #region fields
     private readonly Dictionary<long, IDatabase> _databases = [];
     private readonly Dictionary<long, GroupMessageFtsStore> _ftsStores = [];
+    private readonly Dictionary<long, GroupMessageVectorStore> _vectorStores = [];
     #endregion
 
     #region methods
@@ -59,10 +61,11 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
             await vectorStore.InitializeAsync(cancellationToken);
             _databases[groupId] = database;
             _ftsStores[groupId] = ftsStore;
+            _vectorStores[groupId] = vectorStore;
         }
     }
 
-    /// <summary>在同一事务内保存原消息和分词索引，不依赖业务处理时修改的消息段。</summary>
+    /// <summary>在同一事务内保存原消息、分词索引和向量，不依赖业务处理时修改的消息段。</summary>
     public async Task RecordAsync(GroupMessage message, CancellationToken cancellationToken)
     {
         if (runtimeDataStore.Get(message.GroupId).ChatHistoryEnabled == false ||
@@ -82,6 +85,8 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
             _ => ""
         };
 
+        // 推理在事务开始前完成；空文本仍保存原消息和 FTS，但不生成向量。
+        var vector = string.IsNullOrWhiteSpace(text) ? null : embeddingGenerator.Generate(text, "passage");
         await using var connection = database.CreateConnection();
         await connection.OpenAsync(cancellationToken);
 
@@ -105,6 +110,10 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
         }, transaction, cancellationToken: cancellationToken));
 
         await _ftsStores[message.GroupId].RecordAsync(recordId, text, connection, transaction, cancellationToken);
+        if (vector is not null)
+        {
+            await _vectorStores[message.GroupId].RecordAsync(recordId, vector, connection, transaction, cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
     }
 
