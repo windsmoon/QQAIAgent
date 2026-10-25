@@ -55,6 +55,8 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
                 """, cancellationToken: cancellationToken);
             var ftsStore = new GroupMessageFtsStore(databasePath, tokenizer);
             await ftsStore.InitializeAsync(cancellationToken);
+            var vectorStore = new GroupMessageVectorStore(databasePath);
+            await vectorStore.InitializeAsync(cancellationToken);
             _databases[groupId] = database;
             _ftsStores[groupId] = ftsStore;
         }
