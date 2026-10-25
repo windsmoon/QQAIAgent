@@ -11,6 +11,17 @@ namespace QQAIAgent.Infrastructure.Messages;
 public sealed class GroupMessageVectorStore
 {
     #region fields
+    private const string MessageTextSql = """
+        CASE json_type(messages.content_json)
+            WHEN 'text' THEN json_extract(messages.content_json, '$')
+            WHEN 'array' THEN (
+                SELECT COALESCE(group_concat(json_extract(segment.value, '$.data.text'), '' ORDER BY segment.key), '')
+                FROM json_each(messages.content_json) AS segment
+                WHERE json_extract(segment.value, '$.type') = 'text'
+            )
+            ELSE ''
+        END
+        """;
     private readonly IDatabase _database;
     #endregion
 
@@ -55,17 +66,8 @@ public sealed class GroupMessageVectorStore
         {
             cancellationToken.ThrowIfCancellationRequested();
             // 与 FTS 使用相同的原文提取规则：字符串直接使用，数组按原顺序拼接 text 段。
-            var messages = (await connection.QueryAsync<GroupMessageSearchItem>(new CommandDefinition("""
-                SELECT messages.id AS RecordId,
-                    CASE json_type(messages.content_json)
-                        WHEN 'text' THEN json_extract(messages.content_json, '$')
-                        WHEN 'array' THEN (
-                            SELECT COALESCE(group_concat(json_extract(segment.value, '$.data.text'), '' ORDER BY segment.key), '')
-                            FROM json_each(messages.content_json) AS segment
-                            WHERE json_extract(segment.value, '$.type') = 'text'
-                        )
-                        ELSE ''
-                    END AS Text
+            var messages = (await connection.QueryAsync<GroupMessageSearchItem>(new CommandDefinition($"""
+                SELECT messages.id AS RecordId, {MessageTextSql} AS Text
                 FROM messages
                 WHERE (@LastId IS NULL OR messages.id > @LastId)
                 ORDER BY messages.id
@@ -76,6 +78,7 @@ public sealed class GroupMessageVectorStore
                 break;
             }
 
+            // Build 只在离线时执行，不用管 gc 了。
             // 先生成本批向量，再开启短事务写入，避免模型推理期间持有写锁。
             var vectors = new List<(long RecordId, byte[] Embedding)>();
             foreach (var message in messages)
@@ -108,6 +111,40 @@ public sealed class GroupMessageVectorStore
 
         stopwatch.Stop();
         return (count, skipped, stopwatch.Elapsed);
+    }
+
+    /// <summary>用 query 前缀检索相似聊天，按余弦距离升序返回；不自动建表或生成历史向量。</summary>
+    public async Task<List<(GroupMessageSearchItem Message, double Distance)>> SearchAsync(string text, EmbeddingGenerator generator, int limit = 20, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (limit < 1)
+        {
+            throw new ArgumentException("limit 必须大于 0。", nameof(limit));
+        }
+        var vector = generator.Generate(text, "query");
+        var bytes = new byte[vector.Length * sizeof(float)];
+        Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
+
+        await using var connection = _database.CreateConnection();
+        // 先在向量表内取最近的 k 条，再用本地记录 ID 关联原文；距离越小越相近。
+        var results = await connection.QueryAsync<GroupMessageSearchItem, double, (GroupMessageSearchItem Message, double Distance)>(
+            new CommandDefinition($"""
+                WITH nearest AS (
+                    SELECT record_id, distance
+                    FROM messages_vec
+                    WHERE embedding MATCH @Embedding AND k = @Limit
+                )
+                SELECT messages.id AS RecordId, messages.message_id AS MessageId,
+                    messages.message_time AS MessageTime, messages.sender_id AS SenderId,
+                    messages.sender_nickname AS SenderNickname, messages.sender_card AS SenderCard,
+                    messages.ref_message_id AS RefMessageId, {MessageTextSql} AS Text,
+                    nearest.distance AS Distance
+                FROM nearest
+                JOIN messages ON messages.id = nearest.record_id
+                ORDER BY nearest.distance, messages.id DESC;
+                """, new { Embedding = bytes, Limit = limit }, cancellationToken: cancellationToken),
+            (message, distance) => (message, distance), splitOn: "Distance");
+        return results.AsList();
     }
     #endregion
 }
