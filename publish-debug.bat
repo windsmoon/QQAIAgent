@@ -13,6 +13,12 @@ if exist ".\Bin" (
 
 dotnet publish ".\QQAIAgent\QQAIAgent.Host\QQAIAgent.Host.csproj" -c Debug -r win-x64 --self-contained true -o ".\Bin"
 set "PublishExitCode=%ERRORLEVEL%"
+if not "%PublishExitCode%"=="0" goto :finish
+
+dotnet publish ".\QQAIAgent\QQAIAgent.Cli\QQAIAgent.Cli.csproj" -c Debug -r win-x64 --self-contained true -o ".\Bin"
+set "PublishExitCode=%ERRORLEVEL%"
+
+:finish
 popd
 
 pause
