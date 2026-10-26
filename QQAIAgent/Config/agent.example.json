@@ -9,6 +9,6 @@
   "MaxReferenceDepth": 5,
   "MaxForwardDepth": 5,
   "MaxForwardMessagesPerLayer": 20,
-  "ContextMessageCount": 15,
+  "ContextMessageCount": 10,
   "IsLogContextRelevanceResults": false
 }
