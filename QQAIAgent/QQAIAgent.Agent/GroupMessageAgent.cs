@@ -93,10 +93,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken,
             runtimeDataStore.Get(message.GroupId).ChatHistoryEnabled);
         var chatContentList = new List<ChatContent>();
-        var senderCard = string.IsNullOrWhiteSpace(message.SenderCard) ? "未设置" : message.SenderCard;
+        var senderCard = string.IsNullOrWhiteSpace(message.SenderCard) ? message.SenderNickname : message.SenderCard;
         chatContentList.Add(new ChatTextContent
         {
-            Text = $"当前请求用户信息：\nQQ 号：{message.SenderId}\n群名片：{senderCard}\n\n当前用户消息：\n"
+            Text = $"当前请求用户信息：\nQQ 号：{message.SenderId}\n名称：{senderCard}\n\n当前用户消息：\n"
         });
         await AppendChatContentsAsync(chatContentList, message.MessageContentList, message.GroupId, isReference: false, cancellationToken);
         // 消息列表只属于本次请求，不与其他用户或后续请求共享上下文。
@@ -317,6 +317,11 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         {
             cancellationToken.ThrowIfCancellationRequested();
             var contextMessage = contextMessages[index];
+            var senderCard = string.IsNullOrWhiteSpace(contextMessage.SenderCard) ? contextMessage.SenderNickname : contextMessage.SenderCard;
+            contentList.Add(new ChatTextContent
+            {
+                Text = $"发送者 QQ：{contextMessage.SenderId}\n名称：{senderCard}\n消息内容：\n"
+            });
             await AppendChatContentsAsync(contentList, contextMessage.MessageContentList,
                 contextMessage.GroupId, isReference: false, cancellationToken);
             contentList.Add(new ChatTextContent { Text = "\n" });
@@ -545,9 +550,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 runtimeDataStore.Get(groupMessage.GroupId).ChatHistoryEnabled);
             // 引用说明作为独立文本段放在正文之前，图片保留在原位置。
             var contentList = new List<ChatContent>();
+            var senderCard = string.IsNullOrWhiteSpace(refMessage.SenderCard) ? refMessage.SenderNickname : refMessage.SenderCard;
             contentList.Add(new ChatTextContent
             {
-                Text = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n引用内容：\n"
+                Text = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n名称：{senderCard}\n引用内容：\n"
             });
             await AppendChatContentsAsync(contentList, refMessage.MessageContentList,
                 refMessage.GroupId != 0 ? refMessage.GroupId : groupMessage.GroupId, isReference: true, cancellationToken);
