@@ -66,7 +66,6 @@ public sealed class DailyNewsHandler(IMessageSender messageSender, AgentConfig a
             }
         }
 
-        var hasAttemptedSend = false;
         foreach (var groupId in groupIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -75,13 +74,9 @@ public sealed class DailyNewsHandler(IMessageSender messageSender, AgentConfig a
                 continue;
             }
 
-            // 与文本任务保持一致，只在实际发送的群之间随机等待。
-            if (hasAttemptedSend)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(3, 11)), cancellationToken);
-            }
+            // 与文本任务保持一致，每个目标群发送前随机等待 5～30 秒，包含首群。
+            await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(5, 31)), cancellationToken);
 
-            hasAttemptedSend = true;
             try
             {
                 var messageId = await messageSender.SendGroupImageAsync(groupId, imageUrl, cancellationToken);

@@ -54,7 +54,6 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
         var groupIds = task.GroupIds.Count == 1 && task.GroupIds[0] == -1
             ? agentConfig.AllowedGroups
             : task.GroupIds;
-        var hasAttemptedSend = false;
 
         foreach (var groupId in groupIds)
         {
@@ -134,12 +133,9 @@ public sealed class SummarizeGroupMessagesHandler(GroupMessageStore messageStore
                     continue;
                 }
 
-                if (hasAttemptedSend)
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(3, 11)), cancellationToken);
-                }
+                // 每个群的总结发送前随机等待 5～30 秒，包含首群。
+                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(5, 31)), cancellationToken);
 
-                hasAttemptedSend = true;
                 var messageId = await messageSender.SendGroupMessageAsync(groupId, 0, summary,
                     quoteMessageId: null, atUser: false, cancellationToken: cancellationToken);
                 logger.LogInformation("定时总结发送成功：任务={TaskId}，群={GroupId}，日期={Date:yyyy-MM-dd}，发言数={MessageCount}，消息ID={MessageId}",

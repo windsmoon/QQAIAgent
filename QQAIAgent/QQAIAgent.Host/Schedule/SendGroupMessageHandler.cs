@@ -22,7 +22,6 @@ public sealed class SendGroupMessageHandler(IMessageSender messageSender, AgentC
         var groupIds = task.GroupIds.Count == 1 && task.GroupIds[0] == -1
             ? agentConfig.AllowedGroups
             : task.GroupIds;
-        var hasAttemptedSend = false;
         foreach (var groupId in groupIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -31,13 +30,9 @@ public sealed class SendGroupMessageHandler(IMessageSender messageSender, AgentC
                 continue;
             }
 
-            // 只在实际发送的目标群之间等待，首群和被排除的群不增加等待时间。
-            if (hasAttemptedSend)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(3, 11)), cancellationToken);
-            }
+            // 每个目标群发送前随机等待 5～30 秒，包含首群，被排除的群不增加等待时间。
+            await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(5, 31)), cancellationToken);
 
-            hasAttemptedSend = true;
             try
             {
                 var messageId = await messageSender.SendGroupMessageAsync(groupId, 0, task.Parameter,
