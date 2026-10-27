@@ -104,16 +104,19 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         // 系统提示词放在最前面，并随工具调用消息保留到本次请求结束。
         if (string.IsNullOrWhiteSpace(config.SystemPrompt) == false)
         {
-            messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}\n\n当前时间：{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}" }] });
+            // messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}\n\n当前时间：{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}" }] });
+            messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}" }] });
         }
+        messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}" }] });
 
         // 每次创建对话只加载第一份匹配的人设，作为 user 消息保留，不改变系统提示词。
         var character = await characterStore.LoadAsync(message.SenderId, message.GroupId, cancellationToken);
         messages.Add(new ChatMessage
         {
             Role = ChatRole.User,
-            ContentList = [new ChatTextContent { Text = $"本次对话请使用以下人设：\n{character}" }]
+            ContentList = [new ChatTextContent { Text = $"本次对话请使用以下人设：\n{character}\n" }]
         });
+        messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = $"当前时间：{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}" }] });
 
         var historyContextIndex = messages.Count;
         var refMessageIdResults = new HashSet<long>();
