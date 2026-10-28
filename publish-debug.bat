@@ -11,11 +11,15 @@ if exist ".\Bin" (
     exit /b 1
 )
 
-dotnet publish ".\QQAIAgent\QQAIAgent.Host\QQAIAgent.Host.csproj" -c Debug -r win-x64 --self-contained true -o ".\Bin"
+dotnet publish ".\QQAIAgent\QQAIAgent.Host\QQAIAgent.Host.csproj" -c Debug -r win-x64 --self-contained true -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=.. -o ".\Bin"
 set "PublishExitCode=%ERRORLEVEL%"
 if not "%PublishExitCode%"=="0" goto :finish
 
-dotnet publish ".\QQAIAgent\QQAIAgent.Cli\QQAIAgent.Cli.csproj" -c Debug -r win-x64 --self-contained true -o ".\Bin"
+dotnet publish ".\QQAIAgent\QQAIAgent.Cli\QQAIAgent.Cli.csproj" -c Debug -r win-x64 --self-contained true -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=.. -o ".\Bin"
+set "PublishExitCode=%ERRORLEVEL%"
+if not "%PublishExitCode%"=="0" goto :finish
+
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\organize-publish.ps1" -PublishDirectory ".\Bin"
 set "PublishExitCode=%ERRORLEVEL%"
 
 :finish

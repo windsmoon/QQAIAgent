@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -32,7 +33,7 @@ public sealed class WebSearchTool : ITool, IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
 
         // 在实际调用时读取配置，未使用联网搜索时不依赖此配置文件。
-        var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "websearch.local.json");
+        var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "websearch.local.json");
         var configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<WebSearchConfig>(configJson)
             ?? throw new InvalidDataException($"联网搜索配置不能为 null：{configPath}");

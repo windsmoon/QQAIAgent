@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -39,7 +40,7 @@ public sealed class DeepSeekChatModel : IChatModel, IDisposable
         _imageFilStore = imageFilStore;
         _logger = logger;
         _rkeyCache = rkeyCache;
-        var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "deepseek.local.json");
+        var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "deepseek.local.json");
         var configJson = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<DeepSeekConfig>(configJson)
             ?? throw new InvalidDataException($"QQAIAgent.DeepSeek 配置不能为 null：{configPath}");

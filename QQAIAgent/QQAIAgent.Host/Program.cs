@@ -27,13 +27,17 @@ using QQAIAgent.NapCat;
 using QQAIAgent.NapCat.Config;
 using QQAIAgent.Schedule;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = ApplicationPaths.RootDirectory
+});
 
-var logFilePath = Path.GetFullPath(builder.Configuration["Logging:File:Path"] ?? "Log/qqaiaagent.log", AppContext.BaseDirectory);
+var logFilePath = Path.GetFullPath(builder.Configuration["Logging:File:Path"] ?? "Log/qqaiaagent.log", ApplicationPaths.RootDirectory);
 builder.Services.AddSingleton<ILoggerProvider>(_ => new FileLoggerProvider(logFilePath));
 
-var databasePath = Path.GetFullPath(builder.Configuration["Database:Path"] ?? "Data/qqaiaagent.sqlite3", AppContext.BaseDirectory);
-Directory.CreateDirectory(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory);
+var databasePath = Path.GetFullPath(builder.Configuration["Database:Path"] ?? "Data/qqaiaagent.sqlite3", ApplicationPaths.RootDirectory);
+Directory.CreateDirectory(Path.GetDirectoryName(databasePath) ?? ApplicationPaths.RootDirectory);
 var connectionString = new SqliteConnectionStringBuilder
 {
     DataSource = databasePath,
@@ -41,31 +45,31 @@ var connectionString = new SqliteConnectionStringBuilder
 }.ToString();
 builder.Services.AddSqliteDatabase(connectionString);
 builder.Services.AddSingleton<RequestStatistics>();
-builder.Services.AddSingleton(new RuntimeDataStore(Path.Combine(AppContext.BaseDirectory, "Data", "RuntimeData")));
-builder.Services.AddSingleton(new ImageFileStore(Path.Combine(AppContext.BaseDirectory, "Data")));
-builder.Services.AddSingleton(services => new TextToImageStore(Path.Combine(AppContext.BaseDirectory, "Data"),
+builder.Services.AddSingleton(new RuntimeDataStore(Path.Combine(ApplicationPaths.RootDirectory, "Data", "RuntimeData")));
+builder.Services.AddSingleton(new ImageFileStore(Path.Combine(ApplicationPaths.RootDirectory, "Data")));
+builder.Services.AddSingleton(services => new TextToImageStore(Path.Combine(ApplicationPaths.RootDirectory, "Data"),
     services.GetRequiredService<NapCatConfig>().BotAccount));
-builder.Services.AddSingleton(new VideoCacheStore(Path.Combine(AppContext.BaseDirectory, "Data")));
+builder.Services.AddSingleton(new VideoCacheStore(Path.Combine(ApplicationPaths.RootDirectory, "Data")));
 builder.Services.AddSingleton<IVideoCache>(services => services.GetRequiredService<VideoCacheStore>());
 
-var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", AppContext.BaseDirectory);
+var messagesDirectoryPath = Path.GetFullPath(builder.Configuration["Database:MessagesDirectory"] ?? "Data/Messages", ApplicationPaths.RootDirectory);
 builder.Services.AddSingleton(services => new GroupMessageStore(messagesDirectoryPath,
     services.GetRequiredService<TextToImageStore>(), services.GetRequiredService<Tokenizer>(), services.GetRequiredService<RuntimeDataStore>(),
     services.GetRequiredService<EmbeddingGenerator>()));
 builder.Services.AddSingleton<IGroupMessageQuery>(services => services.GetRequiredService<GroupMessageStore>());
 builder.Services.AddSingleton(new ForwardMessageStore(messagesDirectoryPath));
 
-var configDirectory = Path.Combine(AppContext.BaseDirectory, "Config");
+var configDirectory = Path.Combine(ApplicationPaths.RootDirectory, "Config");
 var tokenizerConfigPath = Path.Combine(configDirectory, "tokenizer.local.json");
 var tokenizerConfig = JsonSerializer.Deserialize<TokenizerConfig>(File.ReadAllText(tokenizerConfigPath))
     ?? throw new InvalidDataException($"分词配置不能为 null：{tokenizerConfigPath}");
 // 服务启动时加载词典，所有群的新消息共用同一个分词器。
 builder.Services.AddSingleton(new Tokenizer(tokenizerConfig, configDirectory));
 // 所有群共用一个模型实例，启动初始化群数据库时加载，由容器负责释放。
-builder.Services.AddSingleton(_ => new EmbeddingGenerator(Path.Combine(AppContext.BaseDirectory, "Third", "multilingual-e5-small")));
+builder.Services.AddSingleton(_ => new EmbeddingGenerator(Path.Combine(ApplicationPaths.RootDirectory, "Third", "multilingual-e5-small")));
 
 builder.Services.AddSingleton<ICharacterStore>(new CharacterStore(
-    Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "Character"),
+    Path.Combine(Path.GetDirectoryName(databasePath) ?? ApplicationPaths.RootDirectory, "Character"),
     Path.Combine(configDirectory, "Default.txt")));
 var napCatConfigPath = Path.Combine(configDirectory, "napcat.local.json");
 var napCatConfigJson = File.ReadAllText(napCatConfigPath);
@@ -104,7 +108,7 @@ builder.Services.AddSingleton<IMessageSender>(services => services.GetRequiredSe
 builder.Services.AddSingleton<IMessageReader>(services => services.GetRequiredService<NapCatClient>());
 builder.Services.AddSingleton<RkeyCache>();
 builder.Services.AddSingleton<IChatModel, DeepSeekChatModel>();
-PluginLoader.RegisterPlugins(builder.Services, Path.Combine(AppContext.BaseDirectory, "Plugins"));
+PluginLoader.RegisterPlugins(builder.Services, Path.Combine(ApplicationPaths.RootDirectory, "Plugins"));
 builder.Services.AddSingleton<IScheduleHandler, SendGroupMessageHandler>();
 builder.Services.AddSingleton<IScheduleHandler, SummarizeGroupMessagesHandler>();
 builder.Services.AddSingleton<IReadOnlyDictionary<string, ITool>>(services =>

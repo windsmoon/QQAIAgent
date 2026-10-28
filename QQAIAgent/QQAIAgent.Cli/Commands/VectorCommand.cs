@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using System.Globalization;
 using QQAIAgent.Infrastructure.Embedding;
@@ -56,7 +57,7 @@ internal static class VectorCommand
         try
         {
             var directory = Path.GetFullPath(options.GetValueOrDefault("--directory",
-                Path.Combine(AppContext.BaseDirectory, "Data", "Messages")));
+                Path.Combine(ApplicationPaths.RootDirectory, "Data", "Messages")));
             List<string> paths = group == "all"
                 ? Directory.EnumerateFiles(directory, "*.sqlite3")
                     .Where(path => long.TryParse(Path.GetFileNameWithoutExtension(path), NumberStyles.None,
@@ -70,7 +71,7 @@ internal static class VectorCommand
             }
 
             var modelDirectory = Path.GetFullPath(options.GetValueOrDefault("--model-directory",
-                Path.Combine(AppContext.BaseDirectory, "Third", "multilingual-e5-small")));
+                Path.Combine(ApplicationPaths.RootDirectory, "Third", "multilingual-e5-small")));
             Console.WriteLine($"正在加载模型并预热：{modelDirectory}");
             using var generator = new EmbeddingGenerator(modelDirectory);
             generator.Generate(isBuild ? "群聊历史消息" : text, isBuild ? "passage" : "query");

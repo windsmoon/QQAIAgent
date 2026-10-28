@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
@@ -62,7 +63,7 @@ internal static class FtsCommand
         try
         {
             var directory = Path.GetFullPath(options.GetValueOrDefault("--directory",
-                Path.Combine(AppContext.BaseDirectory, "Data", "Messages")));
+                Path.Combine(ApplicationPaths.RootDirectory, "Data", "Messages")));
             List<string> paths = group == "all"
                 ? Directory.EnumerateFiles(directory, "*.sqlite3")
                     .Where(path => long.TryParse(Path.GetFileNameWithoutExtension(path), NumberStyles.None,
@@ -76,7 +77,7 @@ internal static class FtsCommand
             }
 
             var configPath = Path.GetFullPath(options.GetValueOrDefault("--config",
-                Path.Combine(AppContext.BaseDirectory, "Config", "tokenizer.local.json")));
+                Path.Combine(ApplicationPaths.RootDirectory, "Config", "tokenizer.local.json")));
             Console.WriteLine("正在加载词典并预热……");
             var config = JsonSerializer.Deserialize<TokenizerConfig>(File.ReadAllText(configPath));
             var tokenizer = new Tokenizer(config, Path.GetDirectoryName(configPath));

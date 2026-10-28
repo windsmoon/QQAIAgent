@@ -7,7 +7,23 @@
 1. 安装并登录 NapCat，开启正向 WebSocket 服务，记下地址、访问令牌和机器人 QQ 号。
 2. 从源码运行时安装 .NET 10 SDK，用 Rider 打开 `QQAIAgent/QQAIAgent.sln`。部署依赖框架的发布版本时，服务器需安装 .NET 10 运行时。
 3. 按下节说明，将 `QQAIAgent/Config/` 中的 example 文件复制为 local 文件并填写配置。
-4. 本地运行 `QQAIAgent.Host`；服务器部署该项目的完整发布输出，再在程序目录运行 `QQAIAgent.Host.exe`。构建与发布会复制配置、工具插件和定时任务插件，部署时保留 `Config/`、`Plugins/`、`appsettings.json` 及全部运行依赖。
+4. 本地运行 `QQAIAgent.Host`；使用根目录的 `publish-debug.bat` 或 `publish-release.bat` 打包后，部署完整的 `Bin/`，运行其中的 `App/QQAIAgent.Host.exe`。构建与发布会复制配置、工具插件和定时任务插件，部署时保留 `Config/`、`Plugins/`、`appsettings.json` 及全部运行依赖。
+
+打包脚本仅将发布根目录的 `QQAIAgent.*` 文件（DLL、EXE、PDB、依赖清单和运行时配置等）归入 `App/`，其他依赖 DLL 保留在根目录，`Plugins/` 内的插件文件也保持原位。目录结构如下：
+
+```text
+Bin/
+  App/                 QQAIAgent.* 主程序文件
+  Config/              业务配置
+  Plugins/             工具与定时任务插件
+  Third/               第三方程序和资源
+  appsettings.json
+  *.dll                其他依赖和 .NET 运行时
+  Data/                运行时数据（启动后生成）
+  Log/                 日志（启动后生成）
+```
+
+命令行工具入口为 `App/QQAIAgent.Cli.exe`。下文的“程序目录”在这种打包布局下指 `Bin/`，配置、数据、日志和第三方资源的相对路径仍以此为基准；源码调试和直接 `dotnet publish` 的目录布局保持原样。打包脚本依赖 .NET 10 的依赖清单 `localPath` 支持，并设置 EXE 从上一级目录加载随包携带的运行时；请使用脚本生成完整发布包，不要只手动移动 EXE 或 DLL。
 
 启动后会连接 NapCat 并核验机器人账号。普通模式在允许的群内发送 `123 你好`，测试模式发送 `321 你好`。业务配置固定从程序目录的 `Config/` 读取，不依赖启动时的工作目录。
 

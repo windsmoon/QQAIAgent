@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Text;
 
 namespace QQAIAgent.Host.Logging;
@@ -14,7 +15,7 @@ internal sealed class FileLoggerProvider : ILoggerProvider, ISupportExternalScop
     #region constructors
     public FileLoggerProvider(string filePath)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? AppContext.BaseDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? ApplicationPaths.RootDirectory);
         _writer = new StreamWriter(filePath, append: true, new UTF8Encoding(false))
         {
             AutoFlush = true

@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using QQAIAgent.Infrastructure.Embedding;
 
@@ -46,7 +47,7 @@ internal static class EmbeddingCommand
         try
         {
             var directory = Path.GetFullPath(options.GetValueOrDefault("--directory",
-                Path.Combine(AppContext.BaseDirectory, "Third", "multilingual-e5-small")));
+                Path.Combine(ApplicationPaths.RootDirectory, "Third", "multilingual-e5-small")));
             Console.WriteLine($"模型目录：{directory}");
             Console.WriteLine($"类型：{type}");
             Console.WriteLine("正在加载模型和 Tokenizer……");

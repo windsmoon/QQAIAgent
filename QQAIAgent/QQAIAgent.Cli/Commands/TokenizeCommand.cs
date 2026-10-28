@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using System.Text.Json;
 using QQAIAgent.Infrastructure.Tokenization;
@@ -15,7 +16,7 @@ internal static class TokenizeCommand
         }
 
         string text = null;
-        var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "tokenizer.local.json");
+        var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "tokenizer.local.json");
         var mode = "accurate";
 
         for (var index = 0; index < args.Length; index++)

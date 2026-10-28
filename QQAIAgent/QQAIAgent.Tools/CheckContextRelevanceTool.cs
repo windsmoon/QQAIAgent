@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -50,7 +51,7 @@ public sealed class CheckContextRelevanceTool : ITool, IDisposable
         }
 
         // 仅在 Agent 调用工具时读取配置，不自动读取或筛选群历史消息。
-        var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "contextrelevance.local.json");
+        var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "contextrelevance.local.json");
         var configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<ContextRelevanceConfig>(configJson)
             ?? throw new InvalidDataException($"上下文关联配置不能为 null：{configPath}");

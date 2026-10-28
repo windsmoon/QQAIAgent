@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
@@ -41,7 +42,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         var hasCacheKey = string.IsNullOrWhiteSpace(cacheKey) == false;
         
         // 在实际调用时读取配置，未使用视频理解时不依赖此配置文件。
-        var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "videounderstanding.local.json");
+        var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "videounderstanding.local.json");
         var configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<VideoUnderstandingConfig>(configJson)
                      ?? throw new InvalidDataException($"视频理解配置不能为 null：{configPath}");
@@ -143,7 +144,7 @@ public sealed class VideoUnderstandingTool : ITool, IDisposable
         if (Path.IsPathRooted(ffprobePath) == false &&
             (ffprobePath.Contains(Path.DirectorySeparatorChar) || ffprobePath.Contains(Path.AltDirectorySeparatorChar)))
         {
-            ffprobePath = Path.GetFullPath(ffprobePath, AppContext.BaseDirectory);
+            ffprobePath = Path.GetFullPath(ffprobePath, ApplicationPaths.RootDirectory);
         }
 
         var startInfo = new ProcessStartInfo

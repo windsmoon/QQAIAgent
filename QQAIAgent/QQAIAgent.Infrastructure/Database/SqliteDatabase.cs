@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Data.Common;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -45,7 +46,7 @@ internal sealed class SqliteDatabase : IDatabase
     {
         var connection = new SqliteConnection(_connectionString);
         // 扩展按连接注册，Microsoft.Data.Sqlite 会在打开及重新打开连接时加载。
-        connection.LoadExtension(Path.Combine(AppContext.BaseDirectory, "Third", "Sqlite", "vec0.dll"));
+        connection.LoadExtension(Path.Combine(ApplicationPaths.RootDirectory, "Third", "Sqlite", "vec0.dll"));
         return connection;
     }
     #endregion

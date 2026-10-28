@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -29,10 +30,10 @@ public sealed class ExecuteBatTool : ITool, IDisposable
         await _executionLock.WaitAsync(cancellationToken);
         try
         {
-            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "bat.local.json");
+            var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "bat.local.json");
             var config = JsonSerializer.Deserialize<BatConfig>(await File.ReadAllTextAsync(configPath, cancellationToken))
                 ?? throw new InvalidDataException($"bat 配置不能为 null：{configPath}");
-            var rootDirectory = Path.GetFullPath(config.RootDirectory, AppContext.BaseDirectory);
+            var rootDirectory = Path.GetFullPath(config.RootDirectory, ApplicationPaths.RootDirectory);
             var groupDirectory = Path.Combine(rootDirectory, "Groups", context.GroupId.ToString());
             var workingDirectory = Path.GetFullPath(relativeDirectory, groupDirectory);
             var relativePath = Path.GetRelativePath(groupDirectory, workingDirectory);

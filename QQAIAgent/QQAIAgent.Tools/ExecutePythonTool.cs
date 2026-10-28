@@ -1,3 +1,4 @@
+using QQAIAgent.Infrastructure.Runtime;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -27,13 +28,13 @@ public sealed class ExecutePythonTool : ITool, IDisposable
         await _executionLock.WaitAsync(cancellationToken);
         try
         {
-            var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "python.local.json");
+            var configPath = Path.Combine(ApplicationPaths.RootDirectory, "Config", "python.local.json");
             var config = JsonSerializer.Deserialize<PythonConfig>(await File.ReadAllTextAsync(configPath, cancellationToken))
                 ?? throw new InvalidDataException($"Python 配置不能为 null：{configPath}");
             var encoding = new UTF8Encoding(false);
             var startInfo = new ProcessStartInfo
             {
-                FileName = Path.GetFullPath(config.ExecutablePath, AppContext.BaseDirectory),
+                FileName = Path.GetFullPath(config.ExecutablePath, ApplicationPaths.RootDirectory),
                 // 从标准输入读取源码，不生成脚本文件或字节码缓存；这些选项不提供安全沙箱。
                 Arguments = "-B -X utf8 -u -",
                 UseShellExecute = false,
