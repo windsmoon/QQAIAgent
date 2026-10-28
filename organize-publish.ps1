@@ -55,26 +55,17 @@ New-Item -ItemType Directory -Path $appDirectory -Force | Out-Null
 # 普通 apphost 在当前目录存在 runtimeconfig、而运行时根目录没有同名 deps 时，
 # 会进入旧版 split/FX 模式，双击 App 内的 EXE 因而直接退出。
 # 使用 SDK 的 Bundler 仅嵌入启动清单，让 EXE 明确走 bundle 启动入口；所有 DLL 仍保持外置。
-$sdkVersion = (& dotnet --version).Trim()
-$sdkLine = & dotnet --list-sdks | Where-Object { $_.StartsWith("$sdkVersion [") } | Select-Object -First 1
-$sdkRoot = [regex]::Match($sdkLine, '\[(.+)\]$').Groups[1].Value
-$hostModelPath = Join-Path (Join-Path $sdkRoot $sdkVersion) 'Sdks\Microsoft.NET.Sdk\tools\net472\Microsoft.NET.HostModel.dll'
-[void][Reflection.Assembly]::LoadFrom($hostModelPath)
+$bundleProject = Join-Path $PSScriptRoot 'bundle-app.proj'
 
 foreach ($executable in $projectFiles | Where-Object { $_.Extension -eq '.exe' }) {
-    $bundler = [Microsoft.NET.HostModel.Bundle.Bundler]::new(
-        $executable.Name, $appDirectory,
-        [Microsoft.NET.HostModel.Bundle.BundleOptions]::None,
-        [Runtime.InteropServices.OSPlatform]::Windows,
-        [Runtime.InteropServices.Architecture]::X64,
-        [Version]::new(10, 0), $false, $executable.BaseName, $false)
-    $bundleFiles = [Collections.Generic.List[Microsoft.NET.HostModel.Bundle.FileSpec]]::new()
-    $bundleFiles.Add([Microsoft.NET.HostModel.Bundle.FileSpec]::new($executable.FullName, $executable.Name))
-    foreach ($extension in @('.deps.json', '.runtimeconfig.json')) {
-        $fileName = $executable.BaseName + $extension
-        $bundleFiles.Add([Microsoft.NET.HostModel.Bundle.FileSpec]::new((Join-Path $publishRoot $fileName), $fileName))
+    # Windows PowerShell 不提供 SDK 的程序集绑定环境，封装任务必须交给 dotnet MSBuild 执行。
+    & dotnet msbuild $bundleProject -nologo -verbosity:minimal -target:BundleApp `
+        "-property:SourceDirectory=$publishRoot" `
+        "-property:BundleOutputDirectory=$appDirectory" `
+        "-property:AppName=$($executable.BaseName)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "EXE 封装失败：$($executable.Name)，退出码：$LASTEXITCODE"
     }
-    [void]$bundler.GenerateBundle($bundleFiles)
 }
 
 foreach ($file in $projectFiles) {

@@ -1,0 +1,25 @@
+<Project DefaultTargets="BundleApp">
+  <!-- 使用当前 SDK 的任务路径，由 dotnet MSBuild 负责加载任务及其依赖。 -->
+  <Import Project="$(MSBuildSDKsPath)\Microsoft.NET.Sdk\targets\Microsoft.NET.Sdk.Common.targets" />
+  <UsingTask TaskName="GenerateBundle" AssemblyFile="$(MicrosoftNETBuildTasksAssembly)" />
+
+  <Target Name="BundleApp">
+    <ItemGroup>
+      <!-- 仅嵌入启动清单，业务程序集和其他 DLL 继续从外部文件加载。 -->
+      <BundleFile Include="$(SourceDirectory)\$(AppName).exe" RelativePath="$(AppName).exe" />
+      <BundleFile Include="$(SourceDirectory)\$(AppName).deps.json" RelativePath="$(AppName).deps.json" />
+      <BundleFile Include="$(SourceDirectory)\$(AppName).runtimeconfig.json" RelativePath="$(AppName).runtimeconfig.json" />
+    </ItemGroup>
+    <GenerateBundle FilesToBundle="@(BundleFile)"
+                    AppHostName="$(AppName).exe"
+                    TargetFrameworkVersion="10.0"
+                    RuntimeIdentifier="win-x64"
+                    OutputDir="$(BundleOutputDirectory)"
+                    IncludeSymbols="false"
+                    IncludeNativeLibraries="false"
+                    IncludeAllContent="false"
+                    EnableCompressionInSingleFile="false"
+                    ShowDiagnosticOutput="false"
+                    EnableMacOSCodeSign="false" />
+  </Target>
+</Project>
