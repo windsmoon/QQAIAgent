@@ -2,10 +2,11 @@ using System.Text;
 using System.Text.Json;
 using QQAIAgent.Abstractions.Character;
 using QQAIAgent.Abstractions.Tool;
+using QQAIAgent.Messaging;
 
 namespace QQAIAgent.Tools;
 
-public sealed class SetCharacterTool(ICharacterStore characterStore) : ITool
+public sealed class SetCharacterTool(ICharacterStore characterStore, IMessageReader messageReader) : ITool
 {
     #region properties
     public string Name => "set_character";
@@ -21,16 +22,26 @@ public sealed class SetCharacterTool(ICharacterStore characterStore) : ITool
         if (operation == "get")
         {
             var character = await characterStore.GetAsync(context.SenderId, context.GroupId, cancellationToken);
-            return new ToolResult($"已保存的人设：\n当前群内人设：\n{character.GroupContent ?? "未设置"}\n\n全局人设：\n{character.GlobalContent ?? "未设置"}");
+            return new ToolResult($"已保存的助手回复人设：\n回复当前提问者的个人人设（跨群生效）：\n{character.PersonalContent ?? "未设置"}\n\n当前群的共享人设：\n{character.GroupContent ?? "未设置"}");
         }
 
         long? groupId = root.GetProperty("scope").GetString() switch
         {
-            "global" => null,
+            "personal" => null,
             "group" => context.GroupId,
-            _ => throw new ArgumentException("scope 必须为 global 或 group。", nameof(argumentsJson))
+            _ => throw new ArgumentException("scope 必须为 personal 或 group。", nameof(argumentsJson))
         };
-        var scopeName = groupId.HasValue ? "当前群内" : "全局";
+        if (groupId.HasValue)
+        {
+            // 群人设由全群共享，设置和删除均通过群成员接口核验实际权限。
+            var role = await messageReader.GetGroupMemberRoleAsync(context.GroupId, context.SenderId, cancellationToken);
+            if (role != "owner" && role != "admin")
+            {
+                return new ToolResult("只有当前群的群主或管理员可以设置或删除群人设，未修改人设。");
+            }
+        }
+
+        var scopeName = groupId.HasValue ? "当前群的共享人设" : "助手回复你时采用的个人人设（跨群生效）";
         switch (operation)
         {
             case "set":
@@ -47,10 +58,10 @@ public sealed class SetCharacterTool(ICharacterStore characterStore) : ITool
                 }
 
                 await characterStore.SaveAsync(context.SenderId, groupId, content, cancellationToken);
-                return new ToolResult($"已设置你的{scopeName}人设，将在下次对话创建时按群内、全局、默认的优先级加载。");
+                return new ToolResult($"已设置{scopeName}，将在下次对话创建时按个人人设、群人设、全局默认人设的优先级加载。");
             case "delete":
                 characterStore.Delete(context.SenderId, groupId);
-                return new ToolResult($"已删除你的{scopeName}人设，将在下次对话创建时按群内、全局、默认的优先级加载。");
+                return new ToolResult($"已删除{scopeName}，将在下次对话创建时按个人人设、群人设、全局默认人设的优先级加载。");
             default:
                 throw new ArgumentException("operation 必须为 set、delete 或 get。", nameof(argumentsJson));
         }

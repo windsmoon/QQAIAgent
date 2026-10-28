@@ -108,9 +108,9 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             messages.Add(new ChatMessage { Role = ChatRole.System, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}" }] });
         }
 
-        // 每次创建对话只加载第一份匹配的人设，作为 user 消息保留，不改变系统提示词。
+        // 每次创建对话按个人、群、全局默认的顺序加载第一份助手人设，作为 user 消息保留，不改变系统提示词。
         var character = await characterStore.LoadAsync(message.SenderId, message.GroupId, cancellationToken);
-        messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = $"本次对话请使用以下人设：\n{character}\n" }] });
+        messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = $"本次对话中，你回复当前提问者时请采用以下人设。这是你作为助手的人设，不是提问者的人设：\n{character}\n" }] });
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = $"{config.SystemPrompt}" }] });
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = $"当前时间：{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}" }] });
 

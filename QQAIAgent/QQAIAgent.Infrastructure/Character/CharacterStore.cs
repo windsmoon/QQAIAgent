@@ -7,10 +7,10 @@ public sealed class CharacterStore(string directoryPath, string defaultCharacter
     #region methods
     public Task<string> LoadAsync(long userId, long groupId, CancellationToken cancellationToken)
     {
-        var path = GetPath(userId, groupId);
+        var path = GetPath(userId, null);
         if (File.Exists(path) == false)
         {
-            path = GetPath(userId, null);
+            path = GetPath(userId, groupId);
         }
 
         if (File.Exists(path) == false)
@@ -21,18 +21,18 @@ public sealed class CharacterStore(string directoryPath, string defaultCharacter
         return File.ReadAllTextAsync(path, cancellationToken);
     }
 
-    public async Task<(string GroupContent, string GlobalContent)> GetAsync(long userId, long groupId, CancellationToken cancellationToken)
+    public async Task<(string PersonalContent, string GroupContent)> GetAsync(long userId, long groupId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var groupPath = GetPath(userId, groupId);
-        var globalPath = GetPath(userId, null);
+        var personalPath = GetPath(userId, null);
         var groupContent = File.Exists(groupPath)
             ? await File.ReadAllTextAsync(groupPath, cancellationToken)
             : null;
-        var globalContent = File.Exists(globalPath)
-            ? await File.ReadAllTextAsync(globalPath, cancellationToken)
+        var personalContent = File.Exists(personalPath)
+            ? await File.ReadAllTextAsync(personalPath, cancellationToken)
             : null;
-        return (groupContent, globalContent);
+        return (personalContent, groupContent);
     }
 
     public Task SaveAsync(long userId, long? groupId, string content, CancellationToken cancellationToken)
@@ -54,8 +54,8 @@ public sealed class CharacterStore(string directoryPath, string defaultCharacter
     private string GetPath(long userId, long? groupId)
     {
         return groupId.HasValue
-            ? Path.Combine(directoryPath, groupId.Value.ToString(), $"{userId}.txt")
-            : Path.Combine(directoryPath, $"{userId}.txt");
+            ? Path.Combine(directoryPath, "Group", $"{groupId.Value}.txt")
+            : Path.Combine(directoryPath, "Personal", $"{userId}.txt");
     }
     #endregion
 }
