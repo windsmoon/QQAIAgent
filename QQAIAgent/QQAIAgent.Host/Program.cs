@@ -76,7 +76,7 @@ var agentConfigPath = Path.Combine(configDirectory, "agent.local.json");
 var agentConfigJson = File.ReadAllText(agentConfigPath);
 var agentConfig = JsonSerializer.Deserialize<AgentConfig>(agentConfigJson)
     ?? throw new InvalidDataException($"Agent 配置不能为 null：{agentConfigPath}");
-agentConfig.SystemPrompt = File.ReadAllText(Path.Combine(configDirectory, "system-prompt.local.md"));
+agentConfig.SystemPrompt = File.ReadAllText(Path.Combine(configDirectory, "system-prompt.local.txt"));
 
 var toolsConfigPath = Path.Combine(configDirectory, "tools.local.json");
 var toolsConfigJson = File.ReadAllText(toolsConfigPath);

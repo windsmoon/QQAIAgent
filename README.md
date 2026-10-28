@@ -21,7 +21,7 @@ example 文件位于 [QQAIAgent/Config](QQAIAgent/Config/)。运行时读取 loc
 | [agent.example.json](QQAIAgent/Config/agent.example.json) | `agent.local.json` | 填写 `AllowedGroups`，确认 `IsTestMode`；其余限制可先沿用模板 |
 | [deepseek.example.json](QQAIAgent/Config/deepseek.example.json) | `deepseek.local.json` | 填写 `ApiKey`，确认模型 `Model`、完整请求地址 `Endpoint` 和超时 |
 | [tools.example.json](QQAIAgent/Config/tools.example.json) | `tools.local.json` | 按需设置 `Enabled` 和 `TimeoutSeconds`；保留工具名称和参数定义 |
-| [system-prompt.example.md](QQAIAgent/Config/system-prompt.example.md) | `system-prompt.local.md` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
+| [system-prompt.example.txt](QQAIAgent/Config/system-prompt.example.txt) | `system-prompt.local.txt` | 按用途修改提示词中的称呼、QQ 信息和回复要求；允许内容为空白，文件必须存在 |
 | [websearch.example.json](QQAIAgent/Config/websearch.example.json) | `websearch.local.json` | 启用 `web_search` 时填写服务 `ApiKey`，确认 `Endpoint`；未使用搜索时不读取此文件 |
 | [videounderstanding.example.json](QQAIAgent/Config/videounderstanding.example.json) | `videounderstanding.local.json` | 启用 `understand_video` 时填写百炼 `ApiKey`，确认模型、输出上限、视频输入限制和 `FfprobePath`；未使用视频理解时不读取此文件 |
 | [contextrelevance.example.json](QQAIAgent/Config/contextrelevance.example.json) | `contextrelevance.local.json` | Agent 在首次 ChatRequest 前调用 `check_context_relevance`，需填写百炼 `ApiKey`，确认 `Endpoint` 对应的业务空间、模型、关联阈值和排序任务说明；没有可判断的候选文本时不读取此文件 |

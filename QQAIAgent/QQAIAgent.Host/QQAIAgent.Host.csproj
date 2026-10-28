@@ -24,7 +24,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\Config\*.md" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="..\Config\system-prompt.*.txt" TargetPath="Config\%(Filename)%(Extension)" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\Config\Default.txt" TargetPath="Config\Default.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\Config\Dictionary\userDict.txt" TargetPath="Config\Dictionary\userDict.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
       <Content Include="..\Config\Dictionary\LICENSE.userDict.txt" TargetPath="Config\Dictionary\LICENSE.userDict.txt" Visible="false" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
