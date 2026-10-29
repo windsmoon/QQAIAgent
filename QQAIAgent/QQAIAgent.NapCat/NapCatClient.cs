@@ -53,7 +53,7 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         }
     }
 
-    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, long? quoteMessageId, bool atUser, CancellationToken cancellationToken)
+    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, long? quoteMessageId, bool atUser, CancellationToken cancellationToken, IReadOnlyCollection<long> atUserIds = null)
     {
         // 优先引用提问消息：引用内容自带提问时的艾特，仅在提问不带艾特或无法引用时才显式艾特。
         var segments = new List<object>();
@@ -65,6 +65,20 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         if (atUser)
         {
             segments.Add(new { type = "at", data = new { qq = userId.ToString(CultureInfo.InvariantCulture) } });
+        }
+
+        if (atUserIds is not null)
+        {
+            foreach (var atUserId in atUserIds)
+            {
+                // 提问者已由原有回复规则艾特时，不重复添加消息段。
+                if (atUser && atUserId == userId)
+                {
+                    continue;
+                }
+
+                segments.Add(new { type = "at", data = new { qq = atUserId.ToString(CultureInfo.InvariantCulture) } });
+            }
         }
 
         try

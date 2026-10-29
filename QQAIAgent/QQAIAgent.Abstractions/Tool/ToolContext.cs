@@ -6,6 +6,8 @@ public sealed class ToolContext
     #region properties
     public long GroupId { get; set; }
     public long SenderId { get; set; }
+    /// <summary>本次请求最终回复要艾特的用户，多轮工具调用累积并去重。</summary>
+    public HashSet<long> AtUserIds { get; } = [];
     public ReasoningEffort ReasoningEffort { get; set; } = ReasoningEffort.Minimal;
     #endregion
 }

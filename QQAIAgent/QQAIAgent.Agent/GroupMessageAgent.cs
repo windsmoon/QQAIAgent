@@ -199,7 +199,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     return (await SendReplyAsync(requestId, message, "回复内容为空", cancellationToken), "empty_response", "");
                 }
 
-                return (await SendReplyAsync(requestId, message, responseText, cancellationToken), "completed", "");
+                return (await SendReplyAsync(requestId, message, responseText, cancellationToken, toolContext.AtUserIds), "completed", "");
             }
 
             // 已无下一次模型调用机会时停止，避免执行无法继续交给模型的工具调用。
@@ -333,10 +333,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         });
     }
 
-    private async Task<long> SendReplyAsync(string requestId, GroupMessage message, string text, CancellationToken cancellationToken)
+    private async Task<long> SendReplyAsync(string requestId, GroupMessage message, string text, CancellationToken cancellationToken, IReadOnlyCollection<long> atUserIds = null)
     {
         // 引用提问消息回复；提问不带艾特或无法引用时仍艾特发送者。
-        var messageId = await messageSender.SendGroupMessageAsync(message.GroupId, message.SenderId, text, message.MessageId, message.NeedAtInReply, cancellationToken);
+        var messageId = await messageSender.SendGroupMessageAsync(message.GroupId, message.SenderId, text, message.MessageId, message.NeedAtInReply, cancellationToken, atUserIds);
         await statistics.RecordReplyAsync(requestId, messageId, CancellationToken.None);
         var usage = await statistics.GetRequestTokenUsageAsync(requestId, CancellationToken.None);
         // 缓存只命中输入 Token，命中率不使用包含输出 Token 的总用量作为分母。

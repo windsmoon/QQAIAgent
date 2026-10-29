@@ -131,6 +131,7 @@ DeepSeek 的超时分别用于每次聊天 HTTP 请求，以及每张图片的�
 | 工具 | 参数 | example 启用状态 | example 超时 | 功能 |
 | --- | --- | --- | --- | --- |
 | `get_time` | `{}` | 开启 | 5 秒 | 返回服务器当前时间的 ISO 8601 字符串，包含时区偏移 |
+| `at_users` | `{"user_ids":[123456789,987654321]}` | 开启 | 10 秒 | 将 QQ 号加入本次请求的艾特集合，多次调用累积去重，Agent 最终回复时随正文一起发送 |
 | `set_runtime_data` | `{"property_name":"ChatHistoryEnabled","value":false}` | 开启 | 10 秒 | 仅群主可按属性名修改当前群 RuntimeData，并保存该群运行时数据 |
 | `set_reasoning_effort` | `{"effort":"high"}` | 开启 | 5 秒 | 调整本条请求下一轮模型调用的思考强度 |
 | `search_group_messages` | `{"keyword":"上线","limit":20}` | 开启 | 30 秒 | 通过固定只读接口查询当前群已记录的消息，支持组合筛选、分页和计数 |
