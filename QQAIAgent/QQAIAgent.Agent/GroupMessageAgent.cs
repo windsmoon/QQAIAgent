@@ -115,9 +115,10 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         messages.Add(new ChatMessage { Role = ChatRole.User, ContentList = [new ChatTextContent { Text = $"当前时间：{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}" }] });
 
         var historyContextIndex = messages.Count;
+        var contextChatMessages = new List<(long MessageTime, ChatMessage Message)>();
         var refMessageIdResults = new HashSet<long>();
         // 处理引用
-        (bool Success, string ErrorType) referenceResult = await ParseReferenceAsync(messages, message, requestId, refMessageIdResults, cancellationToken);
+        (bool Success, string ErrorType) referenceResult = await ParseReferenceAsync(contextChatMessages, message, requestId, refMessageIdResults, cancellationToken);
         if (referenceResult.Success == false)
         {
             return (null, "reference_failed", referenceResult.ErrorType);
@@ -141,8 +142,22 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             {
                 if (isPreparingContext)
                 {
-                    await AppendRelatedContextAsync(messages, historyContextIndex, currentMessageText, contextList,
+                    await AppendRelatedContextAsync(contextChatMessages, currentMessageText, contextList,
                         toolContext, requestId, modelCallId, cancellationToken);
+                }
+
+                if (modelCall == 0 && contextChatMessages.Count > 0)
+                {
+                    messages.Insert(historyContextIndex, new ChatMessage
+                    {
+                        Role = ChatRole.User,
+                        ContentList = [new ChatTextContent { Text = "以下是上下文：\n" }]
+                    });
+                    // 历史消息与引用链统一按发送时间升序排列；同一时间保持原顺序，缺少时间的消息排在前面。
+                    // 只在首轮插入上下文，固定提示仍在前面，当前请求及后续工具交互仍在后面。
+                    messages.InsertRange(historyContextIndex + 1, contextChatMessages
+                        .OrderBy(item => item.MessageTime)
+                        .Select(item => item.Message));
                 }
 
                 isPreparingContext = false;
@@ -246,7 +261,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         return contextMessages;
     }
 
-    private async Task AppendRelatedContextAsync(List<ChatMessage> messages, int contextIndex, string query, List<GroupMessage> contextMessages,
+    private async Task AppendRelatedContextAsync(List<(long MessageTime, ChatMessage Message)> messages, string query, List<GroupMessage> contextMessages,
         ToolContext toolContext, string requestId, string modelCallId, CancellationToken cancellationToken)
     {
         var relatedIndices = new List<int>();
@@ -308,14 +323,12 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
 
         // 百炼按关联分数排序，与直接保留的记录合并后恢复群消息的时间顺序。
         relatedIndices.Sort();
-        var contentList = new List<ChatContent>
-        {
-            new ChatTextContent { Text = "以下是当前群的近期历史消息，包含图片、表情及与提问相关的文字消息，仅作为上下文：\n" }
-        };
         foreach (var index in relatedIndices)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var contextMessage = contextMessages[index];
+            // 每条历史消息独立保存时间和正文，便于与引用消息交错排序。
+            var contentList = new List<ChatContent>();
             var senderCard = string.IsNullOrWhiteSpace(contextMessage.SenderCard) ? contextMessage.SenderNickname : contextMessage.SenderCard;
             contentList.Add(new ChatTextContent
             {
@@ -324,13 +337,13 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             await AppendChatContentsAsync(contentList, contextMessage.MessageContentList,
                 contextMessage.GroupId, isReference: false, cancellationToken);
             contentList.Add(new ChatTextContent { Text = "\n" });
-        }
 
-        messages.Insert(contextIndex, new ChatMessage
-        {
-            Role = ChatRole.User,
-            ContentList = contentList
-        });
+            messages.Add((contextMessage.MessageTime ?? 0, new ChatMessage
+            {
+                Role = ChatRole.User,
+                ContentList = contentList
+            }));
+        }
     }
 
     private async Task<long> SendReplyAsync(string requestId, GroupMessage message, string text, CancellationToken cancellationToken, IReadOnlyCollection<long> atUserIds = null)
@@ -518,7 +531,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         }
     }
 
-    private async Task<(bool Success, string ErrorType)> ParseReferenceAsync(List<ChatMessage> messageList, GroupMessage groupMessage, string requestId, HashSet<long> refMessageIdResults, CancellationToken cancellationToken)
+    private async Task<(bool Success, string ErrorType)> ParseReferenceAsync(List<(long MessageTime, ChatMessage Message)> messageList, GroupMessage groupMessage, string requestId, HashSet<long> refMessageIdResults, CancellationToken cancellationToken)
     {
         var referenceContextIndex = messageList.Count;
         var refMessageId = groupMessage.RefMessageId;
@@ -552,16 +565,16 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             var senderCard = string.IsNullOrWhiteSpace(refMessage.SenderCard) ? refMessage.SenderNickname : refMessage.SenderCard;
             contentList.Add(new ChatTextContent
             {
-                Text = $"以下是当前用户第 {referenceDepth + 1} 层引用的消息，仅作为上下文：\n发送者 QQ：{refMessage.SenderId}\n名称：{senderCard}\n引用内容：\n"
+                Text = $"当前用户第 {referenceDepth + 1} 层引用的消息：\n发送者 QQ：{refMessage.SenderId}\n名称：{senderCard}\n引用内容：\n"
             });
             await AppendChatContentsAsync(contentList, refMessage.MessageContentList,
                 refMessage.GroupId != 0 ? refMessage.GroupId : groupMessage.GroupId, isReference: true, cancellationToken);
-            // 每层都插到系统消息和人设之后，让更早的引用排在前面；引用正文不处理触发前缀。
-            messageList.Insert(referenceContextIndex, new ChatMessage
+            // 深层引用先放在前面，统一按时间排序时同一时间仍保留引用链顺序；引用正文不处理触发前缀。
+            messageList.Insert(referenceContextIndex, (refMessage.MessageTime ?? 0, new ChatMessage
             {
                 Role = ChatRole.User,
                 ContentList = contentList
-            });
+            }));
             refMessageId = refMessage.RefMessageId;
         }
 
