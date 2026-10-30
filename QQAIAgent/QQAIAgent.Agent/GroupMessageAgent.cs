@@ -372,6 +372,14 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                     chatContentList.Add(new ChatTextContent { Text = textContent.Text });
                     break;
                 case ImageContent imageContent:
+                    // 图片引用使用原消息身份和解析时的图片序号，不受转发展开或历史内容过滤影响。
+                    if (imageContent.SourceGroupId == groupId && imageContent.SourceMessageId is long imageMessageId)
+                    {
+                        chatContentList.Add(new ChatTextContent
+                        {
+                            Text = $"[图片引用：message_id={imageMessageId}，image_index={imageContent.ImageIndex}，可用于 generate_image 的 reference_images]"
+                        });
+                    }
                     chatContentList.Add(new ChatImageContent
                     {
                         Url = imageContent.Url,

@@ -92,6 +92,9 @@ public static class GroupMessageParser
                     // 商城表情本质是表情包图片，按图片处理；summary 是 QQ 官方的表情描述文字。
                     message.MessageContentList.Add(new ImageContent
                     {
+                        SourceGroupId = message.GroupId,
+                        SourceMessageId = message.MessageId,
+                        ImageIndex = message.MessageContentList.OfType<ImageContent>().Count(),
                         CacheKey = message.GroupId != 0 && message.MessageId.HasValue
                             ? $"{message.GroupId}-{message.MessageId.Value}-{message.MessageContentList.Count}"
                             : string.Empty,
@@ -119,6 +122,9 @@ public static class GroupMessageParser
             case "image":
                 message.MessageContentList.Add(new ImageContent
                 {
+                    SourceGroupId = message.GroupId,
+                    SourceMessageId = message.MessageId,
+                    ImageIndex = message.MessageContentList.OfType<ImageContent>().Count(),
                     CacheKey = message.GroupId != 0 && message.MessageId.HasValue
                         ? $"{message.GroupId}-{message.MessageId.Value}-{message.MessageContentList.Count}"
                         : string.Empty,
