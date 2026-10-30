@@ -60,7 +60,15 @@ public sealed class GenerateImageTool : ITool, IDisposable
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (response.IsSuccessStatusCode == false)
+        {
+            // 保留百炼返回的完整错误体；非 JSON 的网关错误也能直接查看。
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"百炼生图请求失败：HTTP {(int)response.StatusCode} {response.ReasonPhrase}，{errorBody}",
+                null, response.StatusCode);
+        }
+
         using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var responseDocument = await JsonDocument.ParseAsync(responseStream, cancellationToken: cancellationToken);
         var result = responseDocument.RootElement;
