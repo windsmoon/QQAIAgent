@@ -68,8 +68,7 @@ public sealed partial class GroupMessageStore(string directoryPath, TextToImageS
     /// <summary>在同一事务内保存原消息、分词索引和向量，不依赖业务处理时修改的消息段。</summary>
     public async Task RecordAsync(GroupMessage message, CancellationToken cancellationToken)
     {
-        if (runtimeDataStore.Get(message.GroupId).ChatHistoryEnabled == false ||
-            _databases.TryGetValue(message.GroupId, out var database) == false)
+        if (_databases.TryGetValue(message.GroupId, out var database) == false)
         {
             return;
         }

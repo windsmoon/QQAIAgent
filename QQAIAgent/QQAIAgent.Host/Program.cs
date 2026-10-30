@@ -120,7 +120,7 @@ builder.Services.AddSingleton<GroupMessageAgent>(services => new GroupMessageAge
     agentConfig, napCatConfig.BotAccount, services.GetRequiredService<IMessageSender>(), services.GetRequiredService<IMessageReader>(),
     services.GetRequiredService<IChatModel>(), services.GetRequiredService<IReadOnlyList<ChatToolDefinition>>(),
     services.GetRequiredService<ToolExecutor>(), services.GetRequiredService<GroupMessageStore>(), services.GetRequiredService<ICharacterStore>(),
-    services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<RuntimeDataStore>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
+    services.GetRequiredService<RequestStatistics>(), services.GetRequiredService<ILogger<GroupMessageAgent>>()));
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

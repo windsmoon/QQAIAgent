@@ -9,13 +9,12 @@ using QQAIAgent.Agent.Chat.Content;
 using QQAIAgent.Agent.Config;
 using QQAIAgent.Agent.Statistics;
 using QQAIAgent.Infrastructure.Messages;
-using QQAIAgent.Infrastructure.Runtime;
 using QQAIAgent.Messaging;
 using QQAIAgent.Messaging.Content;
 
 namespace QQAIAgent.Agent;
 
-public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, ICharacterStore characterStore, RequestStatistics statistics, RuntimeDataStore runtimeDataStore, ILogger<GroupMessageAgent> logger)
+public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSender messageSender, IMessageReader messageReader, IChatModel chatModel, IReadOnlyList<ChatToolDefinition> toolDefinitions, ToolExecutor toolExecutor, GroupMessageStore groupMessageStore, ICharacterStore characterStore, RequestStatistics statistics, ILogger<GroupMessageAgent> logger)
 {
     #region fields
     private readonly List<ChatToolDefinition> _enabledToolDefinitions = toolDefinitions.Where(tool => tool.Enabled).ToList();
@@ -90,8 +89,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
         };
         // 消息接收端已筛选出需要处理的消息，并移除了触发标记。
         // 先展开正文里的合并转发，再按原顺序转换文本、图片和视频。
-        await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken,
-            runtimeDataStore.Get(message.GroupId).ChatHistoryEnabled);
+        await TryExpandForwardsAsync(message.MessageContentList, 1, cancellationToken);
         var chatContentList = new List<ChatContent>();
         var senderCard = string.IsNullOrWhiteSpace(message.SenderCard) ? message.SenderNickname : message.SenderCard;
         chatContentList.Add(new ChatTextContent
@@ -491,7 +489,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
     }
 
     // 展开列表中的合并转发：节点拼回为标签文本加原消息段，图片等内容保持原类型继续走常规转换。
-    private async Task TryExpandForwardsAsync(List<MessageContent> contents, int depth, CancellationToken cancellationToken, bool chatHistoryEnabled = true)
+    private async Task TryExpandForwardsAsync(List<MessageContent> contents, int depth, CancellationToken cancellationToken)
     {
         if (depth > config.MaxForwardDepth)
         {
@@ -511,7 +509,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 // 内层转发的节点已随外层响应内联返回，直接使用；外层转发才需要调接口获取。
                 IReadOnlyList<GroupMessage> nodes = forward.InnerMessages.Count > 0
                     ? forward.InnerMessages
-                    : await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken, chatHistoryEnabled);
+                    : await messageReader.GetForwardMessagesAsync(forward.ResourceId, cancellationToken);
                 var limitedMessageList = nodes.Take(config.MaxForwardMessagesPerLayer).ToList();
                 expanded.Add(new TextContent
                 {
@@ -531,7 +529,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
                 expanded.Add(new TextContent { Text = "[合并转发消息，获取失败]" });
             }
 
-            await TryExpandForwardsAsync(expanded, depth + 1, cancellationToken, chatHistoryEnabled);
+            await TryExpandForwardsAsync(expanded, depth + 1, cancellationToken);
             // 删除这个 forward 数据，改用展开后的数据
             contents.RemoveAt(i);
             contents.InsertRange(i, expanded);
@@ -566,8 +564,7 @@ public class GroupMessageAgent(AgentConfig config, long botAccount, IMessageSend
             }
 
             // 引用消息里同样可能包含合并转发，取回后先展开再转换。
-            await TryExpandForwardsAsync(refMessage.MessageContentList, 0, cancellationToken,
-                runtimeDataStore.Get(groupMessage.GroupId).ChatHistoryEnabled);
+            await TryExpandForwardsAsync(refMessage.MessageContentList, 0, cancellationToken);
             // 引用说明作为独立文本段放在正文之前，图片保留在原位置。
             var contentList = new List<ChatContent>();
             var senderCard = string.IsNullOrWhiteSpace(refMessage.SenderCard) ? refMessage.SenderNickname : refMessage.SenderCard;
