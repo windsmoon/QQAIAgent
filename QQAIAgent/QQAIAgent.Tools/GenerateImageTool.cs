@@ -14,7 +14,6 @@ public sealed class GenerateImageTool : ITool, IDisposable
 {
     #region fields
     private readonly HttpClient _httpClient;
-    private readonly IMessageSender _messageSender;
     private readonly IMessageReader _messageReader;
     private readonly GroupMessageStore _groupMessageStore;
     private readonly RkeyCache _rkeyCache;
@@ -25,9 +24,8 @@ public sealed class GenerateImageTool : ITool, IDisposable
     #endregion
 
     #region methods
-    public GenerateImageTool(IMessageSender messageSender, IMessageReader messageReader, GroupMessageStore groupMessageStore, RkeyCache rkeyCache)
+    public GenerateImageTool(IMessageReader messageReader, GroupMessageStore groupMessageStore, RkeyCache rkeyCache)
     {
-        _messageSender = messageSender;
         _messageReader = messageReader;
         _groupMessageStore = groupMessageStore;
         _rkeyCache = rkeyCache;
@@ -35,7 +33,7 @@ public sealed class GenerateImageTool : ITool, IDisposable
         _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
     }
 
-    /// <summary>通过百炼按文字或当前群消息中的参考图生成一张图片并发送到当前群。</summary>
+    /// <summary>通过百炼生成一张图片，登记到本次请求的最终回复中，与回复文字一起发送。</summary>
     public async Task<ToolResult> ExecuteAsync(string argumentsJson, ToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -147,32 +145,16 @@ public sealed class GenerateImageTool : ITool, IDisposable
 
         var usage = result.GetProperty("usage");
 
-        long messageId;
-        try
-        {
-            // 目标群只能来自请求上下文，不能由模型指定其他群。
-            messageId = await _messageSender.SendGroupImageAsync(context.GroupId, url, cancellationToken);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException && cancellationToken.IsCancellationRequested == false)
-        {
-            // 生图已计费，发送失败时保留 URL，避免模型误以为生图失败而重复生成。
-            return new ToolResult(JsonSerializer.Serialize(new
-            {
-                model,
-                url,
-                generated = true,
-                sent = false,
-                error = $"图片已生成，但群图片发送失败：{exception.Message}。请将图片链接交给用户，不要重新生成。"
-            }));
-        }
+        // 工具只登记图片，Agent 完成工具调用循环后再与最终回复文字合并发送。
+        cancellationToken.ThrowIfCancellationRequested();
+        context.ReplyImageUrls.Add(url);
 
         return new ToolResult(JsonSerializer.Serialize(new
         {
             model,
             url,
             generated = true,
-            sent = true,
-            messageId,
+            queued = true,
             usage
         }));
     }

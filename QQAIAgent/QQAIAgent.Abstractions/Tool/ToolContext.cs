@@ -8,6 +8,8 @@ public sealed class ToolContext
     public long SenderId { get; set; }
     /// <summary>本次请求最终回复要艾特的用户，多轮工具调用累积并去重。</summary>
     public HashSet<long> AtUserIds { get; } = [];
+    /// <summary>本次请求最终回复附带的图片地址，多轮工具调用按生成顺序累积。</summary>
+    public List<string> ReplyImageUrls { get; } = [];
     public ReasoningEffort ReasoningEffort { get; set; } = ReasoningEffort.Minimal;
     #endregion
 }

@@ -53,7 +53,7 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         }
     }
 
-    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, long? quoteMessageId, bool atUser, CancellationToken cancellationToken, IReadOnlyCollection<long> atUserIds = null)
+    public async Task<long> SendGroupMessageAsync(long groupId, long userId, string text, long? quoteMessageId, bool atUser, CancellationToken cancellationToken, IReadOnlyCollection<long> atUserIds = null, IReadOnlyList<string> imageUrls = null)
     {
         // 优先引用提问消息：引用内容自带提问时的艾特，仅在提问不带艾特或无法引用时才显式艾特。
         var segments = new List<object>();
@@ -81,12 +81,14 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
             }
         }
 
+        var textRenderedAsImage = false;
         try
         {
             if (text.Length > textToImageThreshold)
             {
                 var imageBytes = TextToImage.Render(text, logger);
                 segments.Add(new { type = "image", data = new { file = $"base64://{Convert.ToBase64String(imageBytes)}" } });
+                textRenderedAsImage = true;
             }
             else
             {
@@ -99,8 +101,17 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
             segments.Add(new { type = "text", data = new { text = $" {text}" } });
         }
 
+        if (imageUrls is not null)
+        {
+            foreach (var imageUrl in imageUrls)
+            {
+                segments.Add(new { type = "image", data = new { file = imageUrl, cache = "0" } });
+            }
+        }
+
         // 保留原始回复文本，供自身图片消息上报后关联。
-        var sendId = textToImageStore.BeginSend(groupId, text);
+        // 图文混合时只有文字确实转图才登记；文字图排在生成图片之前，避免生成图片被还原成回复文字。
+        var sendId = textRenderedAsImage ? textToImageStore.BeginSend(groupId, text) : Guid.Empty;
         long messageId;
         try
         {
@@ -113,18 +124,24 @@ public class NapCatClient(NapCatConfig config, ForwardMessageStore forwardMessag
         }
         catch
         {
-            textToImageStore.CancelSend(sendId);
+            if (textRenderedAsImage)
+            {
+                textToImageStore.CancelSend(sendId);
+            }
             throw;
         }
 
-        try
+        if (textRenderedAsImage)
         {
-            // 发送已经成功，缓存写入不再受原请求取消影响，也不能将缓存失败当作发送失败。
-            await textToImageStore.CompleteSendAsync(sendId, messageId, CancellationToken.None);
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "回复图片原文缓存写入失败：群={GroupId}，消息ID={MessageId}", groupId, messageId);
+            try
+            {
+                // 消息已发送成功，缓存失败不影响发送结果。
+                await textToImageStore.CompleteSendAsync(sendId, messageId, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "回复图片原文缓存写入失败：群={GroupId}，消息ID={MessageId}", groupId, messageId);
+            }
         }
 
         return messageId;
