@@ -96,5 +96,12 @@
     "Description": "通过阿里云百炼 rerank 判断候选上下文与当前提问的关联性，返回关联阈值、是否存在相关上下文，以及每段的原始下标、关联分数和是否达到阈值。由 Agent 固定在首次 ChatRequest 前传入问题和群消息记录库中的候选文本并调用。",
     "ParametersJson": "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"minLength\":1,\"description\":\"当前用户的提问\"},\"contexts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"minItems\":1,\"description\":\"需要判断关联性的候选上下文文本列表，按原始消息顺序提供\"}},\"required\":[\"query\",\"contexts\"],\"additionalProperties\":false}",
     "Enabled": false
+  },
+  {
+    "Name": "generate_image",
+    "TimeoutSeconds": 600,
+    "Description": "通过阿里云百炼按文字描述生成一张图片，并直接作为图片消息发送到当前群。模型选择很重要：日常配图、头像、插画、写实图片、无复杂文字的表情包，以及速度或成本优先时，默认选择 qwen-image-2.1-turbo；中文文字准确性要求较高的图片、带字表情包、海报、信息图、密集文字和复杂排版，选择 qwen-image-3.0。需要透明背景时选择 qwen-image-2.1-turbo，并在 prompt 中明确要求透明背景。用户明确指定这两个模型之一时遵从用户。仅支持文生图，不支持参考图输入或修改已有图片；prompt 必须完整描述需求，需渲染的文字应逐字写明。每次调用固定生成一张，目标群由请求上下文取得。返回 generated、sent、model、url；sent=true 表示已发送，随后简短回复即可，不要重复发送链接或重复生图。generated=true 且 sent=false 表示生图成功但发送失败，应将返回的链接交给用户，不要重新生图。图片链接有效期为 24 小时。超时后不能确定服务端是否已生成，不要自动重试。",
+    "ParametersJson": "{\"type\":\"object\",\"properties\":{\"prompt\":{\"type\":\"string\",\"minLength\":1,\"description\":\"完整描述要生成的画面、主体、风格、构图和颜色；图片中需要出现的文字用引号明确写出。推荐不超过 4500 Token。仅支持文生图，不能读取参考图或编辑现有图片。\"},\"model\":{\"type\":\"string\",\"enum\":[\"qwen-image-2.1-turbo\",\"qwen-image-3.0\"],\"default\":\"qwen-image-2.1-turbo\",\"description\":\"优先按场景选择：qwen-image-2.1-turbo 用于日常配图、头像、插画、写实图片、无复杂文字的表情包，以及速度或成本优先的需求；qwen-image-3.0 用于中文文字准确性要求较高的图片、带字表情包、海报、信息图、密集文字或复杂版面。需要透明背景时选 2.1-Turbo 并在 prompt 中明确要求。用户明确指定这两个模型之一时遵从用户；未指定且不需要复杂文字排版时默认 2.1-Turbo。\"},\"size\":{\"type\":\"string\",\"default\":\"auto\",\"description\":\"输出尺寸，默认 auto，由模型根据提示词选择；也可指定宽x高，如 1024x1024、1536x1024、1024x1536、2048x2048。分隔符是小写字母 x；总像素在 512x512 至 2048x2048 之间，宽高比在 1:8 至 8:1 之间。\"}},\"required\":[\"prompt\"],\"additionalProperties\":false}",
+    "Enabled": true
   }
 ]
