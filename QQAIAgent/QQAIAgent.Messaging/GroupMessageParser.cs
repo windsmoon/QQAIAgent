@@ -169,16 +169,17 @@ public static class GroupMessageParser
         }
     }
 
-    // json 卡段的 data 字段是再编码一层的 JSON 字符串，常见结构为 prompt 摘要加 meta 下首个子对象的 title/desc/qqdocurl。
+    // json 卡片正文位于消息段 data 对象的 data 字段中，可为 JSON 字符串或对象；常见结构为 prompt 摘要加 meta 下首个子对象的 title/desc/qqdocurl。
     private static JsonCardContent ParseJsonCard(JsonElement data)
     {
         var card = new JsonCardContent();
         JsonElement root;
         try
         {
-            root = data.ValueKind == JsonValueKind.String
-                ? JsonSerializer.Deserialize<JsonElement>(data.GetString() ?? "")
-                : data;
+            var cardData = data.GetProperty("data");
+            root = cardData.ValueKind == JsonValueKind.String
+                ? JsonSerializer.Deserialize<JsonElement>(cardData.GetString() ?? "")
+                : cardData;
         }
         catch (JsonException)
         {
