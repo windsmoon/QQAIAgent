@@ -2,5 +2,6 @@
   "ApiKey": "",
   "Model": "deepseek-flash",
   "Endpoint": "https://api.deepseek.com/chat/completions",
+  "FetchEndpoint": "https://api.deepseek.com/v1/tools/fetch",
   "TimeoutSeconds": 120
 }
